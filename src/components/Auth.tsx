@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { auth } from "../firebase";
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut 
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
 } from "firebase/auth";
-import { LogIn, UserPlus, LogOut, Loader2, Sparkles } from "lucide-react";
+import { LogOut, Loader2, Sparkles } from "lucide-react";
 
 interface AuthProps {
   user: any;
@@ -14,37 +14,43 @@ interface AuthProps {
   isGuest: boolean;
 }
 
+// Small inline Google "G" logo so we don't need an extra dependency.
+function GoogleLogo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.26 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z" />
+    </svg>
+  );
+}
+
 export default function Auth({ user, loading, onEnterGuestMode, isGuest }: AuthProps) {
-  const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleSignIn = async () => {
     setError("");
     setActionLoading(true);
-
     try {
-      if (isRegister) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error(err);
-      let chineseError = "认证失败，请检查您的输入。";
-      if (err.code === "auth/email-already-in-use") {
-        chineseError = "该邮箱已被注册。";
-      } else if (err.code === "auth/invalid-email") {
-        chineseError = "邮箱格式不正确。";
-      } else if (err.code === "auth/weak-password") {
-        chineseError = "密码太弱，至少需要6个字符。";
-      } else if (err.code === "auth/wrong-password" || err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
-        chineseError = "邮箱或密码错误，请重试。";
+      let msg = "登录失败，请重试。";
+      if (err.code === "auth/unauthorized-domain") {
+        msg = "当前网址尚未被 Firebase 授权。请在 Firebase 控制台 Authentication → 设置 → 授权域 中添加本站域名后重试。";
+      } else if (err.code === "auth/popup-blocked") {
+        msg = "登录弹窗被浏览器拦截了，请允许弹窗后再试一次。";
+      } else if (
+        err.code === "auth/popup-closed-by-user" ||
+        err.code === "auth/cancelled-popup-request"
+      ) {
+        msg = "登录窗口被关闭了，请重新点击登录。";
       }
-      setError(chineseError);
+      setError(msg);
     } finally {
       setActionLoading(false);
     }
@@ -74,12 +80,16 @@ export default function Auth({ user, loading, onEnterGuestMode, isGuest }: AuthP
     return (
       <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-lake-blue-100 flex items-center justify-center text-lake-blue-600 font-bold text-lg">
-            {user.email?.substring(0, 1).toUpperCase()}
+          <div className="w-10 h-10 rounded-full bg-lake-blue-100 flex items-center justify-center text-lake-blue-600 font-bold text-lg overflow-hidden">
+            {user.photoURL ? (
+              <img src={user.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              user.email?.substring(0, 1).toUpperCase()
+            )}
           </div>
           <div>
             <p className="text-xs text-slate-400 font-medium">当前已登录账号</p>
-            <p className="text-sm font-semibold text-slate-700">{user.email}</p>
+            <p className="text-sm font-semibold text-slate-700">{user.displayName || user.email}</p>
           </div>
         </div>
         <button
@@ -108,10 +118,10 @@ export default function Auth({ user, loading, onEnterGuestMode, isGuest }: AuthP
         </div>
         <div className="flex gap-2">
           <button
-            onClick={onEnterGuestMode} // This will toggle back to login screen in App
+            onClick={onEnterGuestMode} // toggles back to login screen in App
             className="flex items-center gap-2 text-xs font-semibold px-4 py-2 bg-white text-lake-blue-600 border border-lake-blue-200 hover:bg-lake-blue-100 rounded-xl transition-all cursor-pointer"
           >
-            登录/注册以同步云端
+            登录以同步云端
           </button>
         </div>
       </div>
@@ -124,11 +134,9 @@ export default function Auth({ user, loading, onEnterGuestMode, isGuest }: AuthP
         <div className="w-12 h-12 bg-lake-blue-500 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 font-bold text-2xl shadow-sm">
           FI
         </div>
-        <h2 className="text-2xl font-display font-semibold text-slate-800">
-          {isRegister ? "创建你的芬兰语笔记本" : "芬兰语学习助手"}
-        </h2>
+        <h2 className="text-2xl font-display font-semibold text-slate-800">芬兰语学习助手</h2>
         <p className="text-sm text-slate-400 mt-1">
-          {isRegister ? "加入同步练习与生词，多端同步，不再遗忘" : "输入账号登录，开启个性化间隔复习与 AI 提炼"}
+          用 Google 账号登录，开启个性化间隔复习与多端同步
         </p>
       </div>
 
@@ -138,59 +146,22 @@ export default function Auth({ user, loading, onEnterGuestMode, isGuest }: AuthP
         </div>
       )}
 
-      <form onSubmit={handleAuth} className="space-y-4">
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1.5">邮箱地址</label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-lake-blue-500 focus:outline-none transition-colors text-sm"
-            placeholder="your-email@example.com"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1.5">登录密码</label>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-lake-blue-500 focus:outline-none transition-colors text-sm"
-            placeholder="至少 6 位字符"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={actionLoading}
-          className="w-full py-3 bg-lake-blue-500 hover:bg-lake-blue-600 disabled:bg-slate-200 text-white font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
-        >
-          {actionLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : isRegister ? (
-            <>
-              <UserPlus className="w-4 h-4" /> 注册账号
-            </>
-          ) : (
-            <>
-              <LogIn className="w-4 h-4" /> 立即登录
-            </>
-          )}
-        </button>
-      </form>
+      <button
+        type="button"
+        onClick={handleGoogleSignIn}
+        disabled={actionLoading}
+        className="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
+      >
+        {actionLoading ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <>
+            <GoogleLogo /> 使用 Google 账号登录
+          </>
+        )}
+      </button>
 
       <div className="mt-5 pt-5 border-t border-slate-100 flex flex-col gap-3 text-center">
-        <button
-          type="button"
-          onClick={() => setIsRegister(!isRegister)}
-          className="text-xs font-semibold text-lake-blue-600 hover:text-lake-blue-700 transition-colors"
-        >
-          {isRegister ? "已有账号？立即登录" : "还没有账号？免费注册一个"}
-        </button>
-        
         <div className="relative flex items-center justify-center my-1">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-slate-100"></div>
@@ -205,7 +176,7 @@ export default function Auth({ user, loading, onEnterGuestMode, isGuest }: AuthP
         >
           进入离线访客模式 ☕
         </button>
-        <p className="text-[10px] text-slate-400">注意：访客模式下数据仅保存在浏览器 localStore，无法跨设备同步。</p>
+        <p className="text-[10px] text-slate-400">注意：访客模式下数据仅保存在浏览器本地，无法跨设备同步。</p>
       </div>
     </div>
   );
