@@ -1,16 +1,17 @@
 import React, { useState } from "react";
 import { CourseNote, VocabularyWord, FillBlankQuestion, ConjugationTable, TranslationQuestion } from "../types";
 import { deleteCourseNote, saveVocabularyWord, saveExerciseRecord, saveCourseNote, loadVocabularyWords } from "../lib/sync";
-import { 
-  BookOpen, 
-  Trash2, 
-  Calendar, 
-  ArrowLeft, 
-  BookMarked, 
-  Check, 
+import {
+  BookOpen,
+  Trash2,
+  Calendar,
+  ArrowLeft,
+  BookMarked,
+  Check,
   PlusCircle,
   Clock,
   ChevronRight,
+  ChevronDown,
   Loader2,
   ThumbsUp,
   XCircle,
@@ -42,6 +43,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
   const [activeConjKey, setActiveConjKey] = useState<{ id: string; field: string } | null>(null);
   
   const [savedVocabIds, setSavedVocabIds] = useState<string[]>([]);
+  const [keyPointsExpanded, setKeyPointsExpanded] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // JSON Import States
@@ -269,18 +271,38 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
           
           {/* 1. Points */}
           {activeTab === "points" && (
-            <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm space-y-4">
-              <h4 className="text-base font-semibold text-slate-800">课程核心内容</h4>
-              <ul className="space-y-3.5">
-                {(selectedCourse.keyPoints || []).map((pt: string, idx: number) => (
-                  <li key={idx} className="flex gap-3 text-sm text-slate-600 leading-relaxed">
-                    <span className="w-5 h-5 rounded-full bg-lake-blue-50 text-lake-blue-600 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                      {idx + 1}
-                    </span>
-                    <span>{pt}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="space-y-3">
+              <p className="text-xs text-slate-400">
+                课程笔记已归档。语法点详细规则请前往「专项强化」→ 对应语法卡片查看。
+              </p>
+              <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+                <button
+                  onClick={() => setKeyPointsExpanded(v => !v)}
+                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50/50 transition-colors cursor-pointer"
+                >
+                  <span className="text-sm font-semibold text-slate-700">
+                    本节笔记原文（{(selectedCourse.keyPoints || []).length} 条要点）
+                  </span>
+                  {keyPointsExpanded
+                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                    : <ChevronRight className="w-4 h-4 text-slate-400" />
+                  }
+                </button>
+                {keyPointsExpanded && (
+                  <div className="border-t border-slate-100 px-5 pb-5 pt-4">
+                    <ul className="space-y-3">
+                      {(selectedCourse.keyPoints || []).map((pt: string, idx: number) => (
+                        <li key={idx} className="flex gap-3 text-sm text-slate-600 leading-relaxed">
+                          <span className="w-5 h-5 rounded-full bg-lake-blue-50 text-lake-blue-600 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <span>{pt}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -778,7 +800,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
           let ruleStr = pt.rule || "";
           if (pt.ending) ruleStr += `\n词尾特征: ${pt.ending}`;
           if (pt.pitfalls) ruleStr += `\n注意避坑: ${pt.pitfalls}`;
-          if (pt.kpt) ruleStr += `\n辅音交替 (KPT): ${pt.kpt}`;
+          if (pt.kpt) ruleStr += `\n涉及辅音弱化 (kpt)`;
           if (pt.source) ruleStr += `\n来源: ${pt.source}`;
           
           return {

@@ -20,18 +20,14 @@ import Settings from "./components/Settings";
 import Auth from "./components/Auth";
 
 // Icons
-import { 
-  Compass, 
-  Upload, 
-  BookOpen, 
-  BookMarked, 
-  GraduationCap, 
-  PenTool,
-  Settings2, 
-  Sparkles,
+import {
+  Compass,
+  BookOpen,
+  BookMarked,
+  GraduationCap,
+  Settings2,
   Loader2,
   Lock,
-  User
 } from "lucide-react";
 
 export default function App() {
@@ -141,10 +137,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F7F9] text-[#2E3440] flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-[#EBE4D6] text-[#1C1A17] flex flex-col justify-between font-sans">
       
       {/* 1. Header (Nordic Navigation Rail) */}
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-50 shadow-sm/50">
+      <header className="bg-[#F3EFE4] border-b border-[#D9D1C0] sticky top-0 z-50 shadow-sm/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           
           {/* Logo & title */}
@@ -153,13 +149,12 @@ export default function App() {
               FI
             </div>
             <div>
-              <h1 className="text-base font-bold font-display text-slate-800 leading-tight flex items-center gap-1.5">
-                芬兰语学习助手
-                <span className="text-[9px] font-bold bg-lake-blue-50 text-lake-blue-600 px-1.5 py-0.5 rounded uppercase">
-                  A2-B1 级
+              <h1 className="text-base font-bold font-display text-[#1C1A17] leading-tight flex items-center gap-1.5">
+                芬兰语学习
+                <span className="text-[9px] font-bold bg-lake-blue-100 text-lake-blue-700 px-1.5 py-0.5 rounded uppercase">
+                  A2→B1
                 </span>
               </h1>
-              <p className="text-[10px] text-slate-400 font-medium">Nordic Learning Space</p>
             </div>
           </div>
 
@@ -339,7 +334,7 @@ export default function App() {
       </main>
 
       {/* 3. Mobile Navigation Bottom Rail (only visible on small viewports) */}
-      <footer className="lg:hidden bg-white border-t border-slate-100 sticky bottom-0 z-50 shadow-lg">
+      <footer className="lg:hidden bg-[#F3EFE4] border-t border-[#D9D1C0] sticky bottom-0 z-50 shadow-lg">
         <div className="grid grid-cols-5 h-16">
           {[
             { id: "home", label: "首页", icon: Compass },
@@ -367,12 +362,8 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Aesthetic pairing branding */}
-      <footer className="hidden lg:block py-6 border-t border-slate-100 text-center text-xs text-slate-400 font-medium bg-white">
-        <p className="flex items-center justify-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-lake-blue-400" />
-          专为 芬兰语 A2-B1 级设计 • 清新北欧风湖蓝主题 • 100% 教师级 AI 精准语法辅导
-        </p>
+      <footer className="hidden lg:block py-4 border-t border-[#D9D1C0] text-center text-xs text-slate-400 font-medium bg-[#F3EFE4]">
+        Suomen oppiminen · A2-B1
       </footer>
     </div>
   );

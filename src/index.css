@@ -1,31 +1,41 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-lake-blue-50: #F0F4F8;
-  --color-lake-blue-100: #D9E2EC;
-  --color-lake-blue-200: #BCCCDC;
-  --color-lake-blue-300: #9FB3C8;
-  --color-lake-blue-400: #627D98;
-  --color-lake-blue-500: #486581;
-  --color-lake-blue-600: #334E68;
-  --color-lake-blue-700: #243B53;
-  --color-lake-blue-800: #102A43;
-  --color-lake-blue-900: #0F1B29;
-  --color-lake-blue-950: #070E16;
+  /* Warm muted blue replacing old lake-blue */
+  --color-lake-blue-50: #EEF3F7;
+  --color-lake-blue-100: #D4E2EC;
+  --color-lake-blue-200: #BACFE0;
+  --color-lake-blue-300: #9DBAD2;
+  --color-lake-blue-400: #7EA5C3;
+  --color-lake-blue-500: #6189A6;
+  --color-lake-blue-600: #4A7291;
+  --color-lake-blue-700: #365C78;
+  --color-lake-blue-800: #254561;
+  --color-lake-blue-900: #172E48;
+  --color-lake-blue-950: #0B1E30;
+
+  /* Accent colors */
+  --color-olive-500: #6B7314;
+  --color-coral-500: #E07A44;
+  --color-coral-600: #C8682E;
 
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-display: "Space Grotesk", sans-serif;
+  --font-display: "Hanken Grotesk", "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  
+
   --radius-xl: 16px;
   --radius-2xl: 24px;
   --radius-3xl: 32px;
 }
 
 body {
-  background-color: #F4F7F9;
-  color: #2E3440;
+  background-color: #EBE4D6;
+  color: #1C1A17;
   font-family: var(--font-sans);
 }
 
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
