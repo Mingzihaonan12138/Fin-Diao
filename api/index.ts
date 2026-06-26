@@ -8,9 +8,8 @@ import { GoogleGenAI } from "@google/genai";
 // relative/JSON imports break under the function's native ESM runtime.
 
 // Public Firebase project identifiers (also present in src/firebase.ts).
-const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "formidable-rain-1rr5c";
-const DATABASE_ID =
-  process.env.FIRESTORE_DATABASE_ID || "ai-studio-3beb53d9-57f0-42af-9269-1e83a49947a5";
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "fin-diao";
+const DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || "(default)";
 
 // Initialize Admin SDK once. On platforms without Application Default
 // Credentials (e.g. Vercel), supply a service account JSON via the
@@ -29,7 +28,7 @@ if (!getApps().length) {
   }
 }
 
-const db = getFirestore(DATABASE_ID);
+const db = DATABASE_ID && DATABASE_ID !== "(default)" ? getFirestore(DATABASE_ID) : getFirestore();
 
 // Helper: load all active keys for round-robin
 async function getActiveGeminiKeys(): Promise<string[]> {
