@@ -1,9 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN" translate="no">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <!-- Tell browsers NOT to auto-translate: the page is already Chinese, and
+         in-page translation mutates the DOM and crashes React on re-render
+         (insertBefore NotFoundError -> white screen). -->
+    <meta name="google" content="notranslate" />
+    <title>芬兰语学习助手 · A2-B1</title>
   </head>
   <body>
     <div id="root"></div>
