@@ -2,11 +2,12 @@ import { useState } from "react";
 import { HelpCircle, ChevronRight, Check, RotateCcw, ThumbsUp, XCircle, Sparkles, Loader2, Play } from "lucide-react";
 
 interface GrammarPracticeProps {
+  vocab?: any[];
   user: any;
   onRefreshStats: () => void;
 }
 
-export default function GrammarPractice({ user, onRefreshStats }: GrammarPracticeProps) {
+export default function GrammarPractice({ vocab = [], user, onRefreshStats }: GrammarPracticeProps) {
   const [difficulty, setDifficulty] = useState<"A2" | "B1">("A2");
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   
@@ -524,7 +525,282 @@ export default function GrammarPractice({ user, onRefreshStats }: GrammarPractic
     ]
   };
 
-  const activeQuizzes = presetQuizzes[difficulty] || [];
+  const isAnswerCorrect = (userVal: string, correctVal: string | string[]): boolean => {
+    if (!userVal || !correctVal) return false;
+    const userClean = userVal.trim().toLowerCase();
+    if (Array.isArray(correctVal)) {
+      return correctVal.some(v => v.trim().toLowerCase() === userClean);
+    }
+    return String(correctVal).trim().toLowerCase() === userClean;
+  };
+
+  const getDynamicQuizzes = () => {
+    const isVerb = (word: any) => {
+      const pos = (word.partOfSpeech || "").toLowerCase().trim();
+      return pos === "动词" || pos === "verb";
+    };
+
+    const isNounOrAdj = (word: any) => {
+      const pos = (word.partOfSpeech || "").toLowerCase().trim();
+      return pos === "名词" || pos === "noun" || pos === "形容词" || pos === "adj" || pos === "adjective";
+    };
+
+    const isPluraleTantum = (word: any): boolean => {
+      if (!word.inflections?.nounInflections) return false;
+      const inf = word.inflections.nounInflections;
+      const hasSingular = !!(inf.singularGenitive || inf.singularPartitive);
+      const hasPlural = !!(inf.pluralGenitive || inf.pluralPartitive || inf.pluralNominative);
+      return !hasSingular && hasPlural;
+    };
+
+    const getFilteredWordsForTopic = (topicId: string, vocabList: any[]): any[] => {
+      if (!vocabList || vocabList.length === 0) return [];
+      return vocabList.filter(word => {
+        const inf = word.inflections;
+        if (!inf) return false;
+        const verb = isVerb(word);
+        const nounOrAdj = isNounOrAdj(word);
+
+        switch (topicId) {
+          case "verb_type_1":
+            return verb && inf.verbType === 1 && !!inf.conjugations;
+          case "verb_type_2":
+            return verb && inf.verbType === 2 && !!inf.conjugations;
+          case "verb_type_3":
+            return verb && inf.verbType === 3 && !!inf.conjugations;
+          case "verb_type_4":
+            return verb && inf.verbType === 4 && !!inf.conjugations;
+          case "verb_type_5":
+            return verb && inf.verbType === 5 && !!inf.conjugations;
+          case "verb_type_6":
+            return verb && inf.verbType === 6 && !!inf.conjugations;
+          case "infinitive_1":
+            return verb && !!inf.firstInfinitive;
+          case "infinitive_2":
+            return verb && !!(inf.secondInfinitive?.inessive || inf.secondInfinitive?.instructive);
+          case "infinitive_3":
+            return verb && !!(inf.thirdInfinitive?.inessive || inf.thirdInfinitive?.elative || inf.thirdInfinitive?.illative || inf.thirdInfinitive?.adessive || inf.thirdInfinitive?.abessive);
+          case "noun_sing_gen":
+            return nounOrAdj && !!inf.nounInflections?.singularGenitive && !isPluraleTantum(word);
+          case "noun_sing_part":
+            return nounOrAdj && !!inf.nounInflections?.singularPartitive && !isPluraleTantum(word);
+          case "noun_plur_nom":
+            return nounOrAdj && !!inf.nounInflections?.pluralNominative;
+          case "noun_plur_gen":
+            return nounOrAdj && !!inf.nounInflections?.pluralGenitive;
+          case "noun_plur_part":
+          case "partitiivi_pl":
+            return nounOrAdj && !!inf.nounInflections?.pluralPartitive;
+          default:
+            return false;
+        }
+      });
+    };
+
+    const cleanAnswer = (val: any): string => {
+      if (Array.isArray(val)) {
+        return val[0] || "";
+      }
+      return val || "";
+    };
+
+    const result: any = { A2: [], B1: [] };
+
+    for (const diff of ["A2", "B1"] as const) {
+      const origList = presetQuizzes[diff] || [];
+      result[diff] = origList.map((origTopic: any) => {
+        const topicId = origTopic.id;
+        const matchingWords = getFilteredWordsForTopic(topicId, vocab);
+        if (matchingWords.length === 0) {
+          return origTopic;
+        }
+
+        const sampleSize = Math.min(matchingWords.length, 4);
+        const shuffled = [...matchingWords].sort(() => 0.5 - Math.random());
+        const blankWords = shuffled.slice(0, sampleSize);
+        
+        const generatedBlanks = blankWords.map((word, idx) => {
+          const inf = word.inflections;
+          let sentence = "";
+          let answer: string | string[] = "";
+          let hint = "";
+
+          if (topicId.startsWith("verb_type_")) {
+            const pronouns = ["minä", "sinä", "hän", "me", "te", "he"];
+            const p = pronouns[idx % pronouns.length];
+            const ans = inf.conjugations?.[p];
+            sentence = `请写出动词 '${word.word}' (${word.translation}) 的 [${p}] 人称现在时变位形式：___`;
+            answer = ans || "";
+            hint = `动词原形: ${word.word} (${word.translation})，要求变位人称: ${p}`;
+          } else if (topicId === "infinitive_1") {
+            sentence = `请写出动词 '${word.word}' (${word.translation}) 的 [第一不定式] 形式：___`;
+            answer = inf.firstInfinitive || "";
+            hint = `动词原形: ${word.word} (${word.translation}) 的第一不定式`;
+          } else if (topicId === "infinitive_2") {
+            const keys = [];
+            if (inf.secondInfinitive?.inessive) keys.push("inessive");
+            if (inf.secondInfinitive?.instructive) keys.push("instructive");
+            const key = keys[idx % keys.length] || "inessive";
+            const ans = inf.secondInfinitive?.[key];
+            const label = key === "inessive" ? "内格 (-essa/-essä)" : "方式格 (-en)";
+            sentence = `请写出动词 '${word.word}' (${word.translation}) 的 [第二不定式 ${label}] 形式：___`;
+            answer = ans || "";
+            hint = `动词原形: ${word.word} (${word.translation}) 的第二不定式 ${label}`;
+          } else if (topicId === "infinitive_3") {
+            const keys = [];
+            if (inf.thirdInfinitive?.inessive) keys.push("inessive");
+            if (inf.thirdInfinitive?.elative) keys.push("elative");
+            if (inf.thirdInfinitive?.illative) keys.push("illative");
+            if (inf.thirdInfinitive?.adessive) keys.push("adessive");
+            if (inf.thirdInfinitive?.abessive) keys.push("abessive");
+            const key = keys[idx % keys.length] || "inessive";
+            const ans = inf.thirdInfinitive?.[key];
+            const caseLabels: any = {
+              inessive: "内格 (-massa)",
+              elative: "出格 (-masta)",
+              illative: "入格 (-maan)",
+              adessive: "工具格 (-malla)",
+              abessive: "无格 (-matta)"
+            };
+            const label = caseLabels[key] || key;
+            sentence = `请写出动词 '${word.word}' (${word.translation}) 的 [第三不定式 ${label}] 形式：___`;
+            answer = ans || "";
+            hint = `动词原形: ${word.word} (${word.translation}) 的第三不定式 ${label}`;
+          } else if (topicId === "noun_sing_gen") {
+            sentence = `请写出名词/形容词 '${word.word}' (${word.translation}) 的 [单数属格 (-n)] 形式：___`;
+            answer = inf.nounInflections?.singularGenitive || "";
+            hint = `原形: ${word.word} (${word.translation}) 的单数属格`;
+          } else if (topicId === "noun_sing_part") {
+            sentence = `请写出名词/形容词 '${word.word}' (${word.translation}) 的 [单数部分格 (-a/-tä/-tta)] 形式：___`;
+            answer = inf.nounInflections?.singularPartitive || "";
+            hint = `原形: ${word.word} (${word.translation}) 的单数部分格`;
+          } else if (topicId === "noun_plur_nom") {
+            sentence = `请写出名词/形容词 '${word.word}' (${word.translation}) 的 [复数主格 (-t)] 形式：___`;
+            answer = inf.nounInflections?.pluralNominative || "";
+            hint = `原形: ${word.word} (${word.translation}) 的复数主格`;
+          } else if (topicId === "noun_plur_gen") {
+            sentence = `请写出名词/形容词 '${word.word}' (${word.translation}) 的 [复数属格 (-ien/-jen/-ten/-den)] 形式：___`;
+            answer = inf.nounInflections?.pluralGenitive || "";
+            hint = `原形: ${word.word} (${word.translation}) 的复数属格`;
+          } else if (topicId === "noun_plur_part" || topicId === "partitiivi_pl") {
+            sentence = `请写出名词/形容词 '${word.word}' (${word.translation}) 的 [复数部分格 (-ja/-ita/-itä)] 形式：___`;
+            answer = inf.nounInflections?.pluralPartitive || "";
+            hint = `原形: ${word.word} (${word.translation}) 的复数部分格`;
+          }
+
+          return {
+            id: `gen_b_${topicId}_${word.id}_${idx}`,
+            sentence,
+            answer,
+            hint
+          };
+        });
+
+        const generatedTables = [];
+        const tableWord = matchingWords[0];
+        if (tableWord) {
+          const topicId = origTopic.id;
+          if (topicId.startsWith("verb_type_")) {
+            const pObj = {
+              minä: cleanAnswer(tableWord.inflections?.conjugations?.minä),
+              sinä: cleanAnswer(tableWord.inflections?.conjugations?.sinä),
+              hän: cleanAnswer(tableWord.inflections?.conjugations?.hän),
+              me: cleanAnswer(tableWord.inflections?.conjugations?.me),
+              te: cleanAnswer(tableWord.inflections?.conjugations?.te),
+              he: cleanAnswer(tableWord.inflections?.conjugations?.he)
+            };
+            generatedTables.push({
+              id: `gen_t_${topicId}_${tableWord.id}`,
+              title: `现在时人称变位表：${tableWord.word} (${tableWord.translation})`,
+              verb: tableWord.word,
+              verbClass: tableWord.inflections?.verbType ? `Type ${tableWord.inflections.verbType}` : "动词变位",
+              pronouns: pObj
+            });
+          } else if (topicId === "infinitive_1" || topicId === "infinitive_2" || topicId === "infinitive_3") {
+            const tableWords = matchingWords.slice(0, 6);
+            const pronouns: any = {};
+            const labels = ["minä", "sinä", "hän", "me", "te", "he"];
+            tableWords.forEach((tw, tIdx) => {
+              const label = labels[tIdx] || `word_${tIdx}`;
+              let ansVal: any = "";
+              if (topicId === "infinitive_1") {
+                ansVal = tw.inflections?.firstInfinitive;
+              } else if (topicId === "infinitive_2") {
+                ansVal = tw.inflections?.secondInfinitive?.inessive || tw.inflections?.secondInfinitive?.instructive;
+              } else if (topicId === "infinitive_3") {
+                ansVal = tw.inflections?.thirdInfinitive?.inessive || tw.inflections?.thirdInfinitive?.illative || tw.inflections?.thirdInfinitive?.elative;
+              }
+              if (ansVal) {
+                pronouns[`${tw.word} (${tw.translation})`] = cleanAnswer(ansVal);
+              }
+            });
+            generatedTables.push({
+              id: `gen_t_${topicId}`,
+              title: `${topicId === "infinitive_1" ? "第一" : topicId === "infinitive_2" ? "第二" : "第三"}不定式变化大表`,
+              verb: "不定式形式",
+              verbClass: "Infinitive",
+              pronouns
+            });
+          } else {
+            const pObj: any = {};
+            const ni = tableWord.inflections?.nounInflections;
+            if (ni) {
+              if (!isPluraleTantum(tableWord)) {
+                if (ni.singularGenitive) pObj["单数属格 (gen_sg)"] = cleanAnswer(ni.singularGenitive);
+                if (ni.singularPartitive) pObj["单数部分格 (part_sg)"] = cleanAnswer(ni.singularPartitive);
+              }
+              if (ni.pluralGenitive) pObj["复数属格 (gen_pl)"] = cleanAnswer(ni.pluralGenitive);
+              if (ni.pluralPartitive) pObj["复数部分格 (part_pl)"] = cleanAnswer(ni.pluralPartitive);
+              if (ni.pluralNominative) pObj["复数主格 (nom_pl)"] = cleanAnswer(ni.pluralNominative);
+            }
+            generatedTables.push({
+              id: `gen_t_${topicId}_${tableWord.id}`,
+              title: `名词五格变化对照表：${tableWord.word} (${tableWord.translation})`,
+              verb: tableWord.word,
+              verbClass: isPluraleTantum(tableWord) ? "仅复数名词" : "名词变格",
+              pronouns: pObj
+            });
+          }
+        }
+
+        const translationWords = matchingWords.filter(w => w.exampleSentence && w.translationExample);
+        const generatedTranslations = [];
+        const transSampleSize = Math.min(translationWords.length, 2);
+        const transShuffled = [...translationWords].sort(() => 0.5 - Math.random());
+        const selectedTransWords = transShuffled.slice(0, transSampleSize);
+
+        if (selectedTransWords.length > 0) {
+          selectedTransWords.forEach((word, idx) => {
+            generatedTranslations.push({
+              id: `gen_tr_${topicId}_${word.id}_${idx}`,
+              chinese: word.translationExample,
+              finnish: word.exampleSentence,
+              selfCheckpoints: [
+                `拼写是否包含核心单词: ${word.word}`,
+                `是否检查了大小写与句末标点`
+              ]
+            });
+          });
+        } else {
+          if (origTopic.translations && origTopic.translations.length > 0) {
+            generatedTranslations.push(...origTopic.translations);
+          }
+        }
+
+        return {
+          ...origTopic,
+          blanks: generatedBlanks.length > 0 ? generatedBlanks : origTopic.blanks,
+          tables: generatedTables.length > 0 ? generatedTables : origTopic.tables,
+          translations: generatedTranslations.length > 0 ? generatedTranslations : origTopic.translations
+        };
+      });
+    }
+
+    return result;
+  };
+
+  const dynamicQuizzes = getDynamicQuizzes();
+  const activeQuizzes = dynamicQuizzes[difficulty] || [];
   const currentQuiz = activeQuizzes.find((q: any) => q.id === selectedTopic);
 
   // Submit translation and request Gemini API real-time correction for B1
@@ -593,10 +869,10 @@ export default function GrammarPractice({ user, onRefreshStats }: GrammarPractic
     const answers = tableAnswers[tableId] || {};
     const newAnswers: { [key: string]: string } = {};
     
-    ["minä", "sinä", "hän", "me", "te", "he"].forEach((p) => {
-      const userVal = (answers[p] || "").trim().toLowerCase();
-      const correctVal = correctTable.pronouns[p].trim().toLowerCase();
-      if (userVal === correctVal) {
+    Object.keys(correctTable.pronouns).forEach((p) => {
+      const userVal = (answers[p] || "");
+      const correctVal = correctTable.pronouns[p];
+      if (isAnswerCorrect(userVal, correctVal)) {
         newAnswers[p] = answers[p]; // Keep
       } else {
         newAnswers[p] = ""; // Reset for re-practice!
@@ -784,7 +1060,7 @@ export default function GrammarPractice({ user, onRefreshStats }: GrammarPractic
                 <div className="space-y-5">
                   {currentQuiz.blanks.map((q: any, idx: number) => {
                     const userVal = blankAnswers[q.id] || "";
-                    const isCorrect = userVal.trim().toLowerCase() === q.answer.trim().toLowerCase();
+                    const isCorrect = isAnswerCorrect(userVal, q.answer);
                     return (
                       <div key={q.id} className="space-y-2 p-4 rounded-xl border border-transparent hover:bg-slate-50/50 hover:border-slate-100">
                         <p className="text-base font-semibold text-slate-800">
@@ -823,7 +1099,7 @@ export default function GrammarPractice({ user, onRefreshStats }: GrammarPractic
                           }`}>
                             <div className="flex items-center gap-1 font-bold">
                               {isCorrect ? <ThumbsUp className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                              {isCorrect ? "答对啦！" : `答错了。正确形式: ${q.answer}`}
+                              {isCorrect ? "答对啦！" : `答错了。正确形式: ${Array.isArray(q.answer) ? q.answer.join(" 或 ") : q.answer}`}
                             </div>
                             <p className="mt-1 text-slate-500 font-medium">规则：{q.hint}</p>
                           </div>
@@ -858,11 +1134,11 @@ export default function GrammarPractice({ user, onRefreshStats }: GrammarPractic
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {(["minä", "sinä", "hän", "me", "te", "he"] as const).map((p) => {
+                      {Object.keys(table.pronouns).map((p) => {
                         const answers = tableAnswers[table.id] || {};
                         const userVal = answers[p] || "";
                         const correctVal = table.pronouns[p];
-                        const isCorrect = userVal.trim().toLowerCase() === correctVal.trim().toLowerCase();
+                        const isCorrect = isAnswerCorrect(userVal, correctVal);
 
                         return (
                           <div key={p} className="space-y-1 bg-slate-50/50 p-3 rounded-xl border border-slate-100 shadow-sm">
@@ -894,7 +1170,7 @@ export default function GrammarPractice({ user, onRefreshStats }: GrammarPractic
                             />
                             {tableGraded && !isCorrect && (
                               <p className="text-[10px] text-red-500 font-bold text-center mt-0.5">
-                                正确: {correctVal}
+                                正确: {Array.isArray(correctVal) ? correctVal.join(" / ") : correctVal}
                               </p>
                             )}
                           </div>

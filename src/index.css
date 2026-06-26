@@ -2,17 +2,17 @@
 @import "tailwindcss";
 
 @theme {
-  --color-lake-blue-50: #EBF1F6;
-  --color-lake-blue-100: #D8E4EF;
-  --color-lake-blue-200: #B8CEDA;
-  --color-lake-blue-300: #9AB6CB;
-  --color-lake-blue-400: #81A1C1;
-  --color-lake-blue-500: #5E81AC;
-  --color-lake-blue-600: #4C6B8A;
-  --color-lake-blue-700: #3B526D;
-  --color-lake-blue-800: #2E4057;
-  --color-lake-blue-900: #1F2D3D;
-  --color-lake-blue-950: #111C24;
+  --color-lake-blue-50: #F0F4F8;
+  --color-lake-blue-100: #D9E2EC;
+  --color-lake-blue-200: #BCCCDC;
+  --color-lake-blue-300: #9FB3C8;
+  --color-lake-blue-400: #627D98;
+  --color-lake-blue-500: #486581;
+  --color-lake-blue-600: #334E68;
+  --color-lake-blue-700: #243B53;
+  --color-lake-blue-800: #102A43;
+  --color-lake-blue-900: #0F1B29;
+  --color-lake-blue-950: #070E16;
 
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-display: "Space Grotesk", sans-serif;

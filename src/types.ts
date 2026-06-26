@@ -9,31 +9,31 @@ export interface WordInflections {
   partOfSpeech: string;
   verbType?: number;
   conjugations?: {
-    minä: string;
-    sinä: string;
-    hän: string;
-    me: string;
-    te: string;
-    he: string;
+    minä: string | string[];
+    sinä: string | string[];
+    hän: string | string[];
+    me: string | string[];
+    te: string | string[];
+    he: string | string[];
   };
-  firstInfinitive?: string;
+  firstInfinitive?: string | string[];
   secondInfinitive?: {
-    inessive: string;
-    instructive: string;
+    inessive: string | string[];
+    instructive: string | string[];
   };
   thirdInfinitive?: {
-    inessive: string;
-    elative: string;
-    illative: string;
-    adessive: string;
-    abessive: string;
+    inessive: string | string[];
+    elative: string | string[];
+    illative: string | string[];
+    adessive: string | string[];
+    abessive: string | string[];
   };
   nounInflections?: {
-    singularGenitive: string;
-    pluralGenitive: string;
-    singularPartitive: string;
-    pluralPartitive: string;
-    pluralNominative: string;
+    singularGenitive: string | string[];
+    pluralGenitive: string | string[];
+    singularPartitive: string | string[];
+    pluralPartitive: string | string[];
+    pluralNominative: string | string[];
   };
 }
 

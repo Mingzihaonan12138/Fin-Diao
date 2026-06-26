@@ -41,6 +41,27 @@ export default function App() {
   
   // App state
   const [activeTab, setActiveTab] = useState<string>("home");
+  const [coursebookTab, setCoursebookTab] = useState<"notes" | "upload">("notes");
+  const [practiceSubTab, setPracticeSubTab] = useState<"grammar" | "sentence">("grammar");
+
+  const handleSelectTab = (tabId: string) => {
+    if (tabId === "upload") {
+      setActiveTab("coursebook");
+      setCoursebookTab("upload");
+    } else if (tabId === "coursebook") {
+      setActiveTab("coursebook");
+      setCoursebookTab("notes");
+    } else if (tabId === "practice") {
+      setActiveTab("practice");
+      setPracticeSubTab("grammar");
+    } else if (tabId === "dailysentence") {
+      setActiveTab("practice");
+      setPracticeSubTab("sentence");
+    } else {
+      setActiveTab(tabId);
+    }
+  };
+
   const [courses, setCourses] = useState<CourseNote[]>([]);
   const [vocab, setVocab] = useState<VocabularyWord[]>([]);
   const [records, setRecords] = useState<ExerciseRecord[]>([]);
@@ -91,7 +112,7 @@ export default function App() {
     // We can pass this to trigger selected course viewing in CourseBook
     // To implement cleanly, let's select the "coursebook" tab.
     // CourseBook automatically handles detail displays inside.
-    setActiveTab("coursebook");
+    handleSelectTab("coursebook");
   };
 
   // Loading Screen for first time auth
@@ -146,18 +167,16 @@ export default function App() {
           <nav className="hidden lg:flex items-center gap-1.5">
             {[
               { id: "home", label: "学习首页", icon: Compass },
-              { id: "upload", label: "上传新课", icon: Upload },
               { id: "coursebook", label: "我的课本", icon: BookOpen },
               { id: "vocab", label: "生词错词", icon: BookMarked },
-              { id: "practice", label: "语法强化", icon: GraduationCap },
-              { id: "dailysentence", label: "每日造句", icon: PenTool },
+              { id: "practice", label: "专项强化", icon: GraduationCap },
               { id: "settings", label: "系统设置", icon: Settings2 },
             ].map((t) => {
               const IconComp = t.icon;
               return (
                 <button
                   key={t.id}
-                  onClick={() => setActiveTab(t.id)}
+                  onClick={() => handleSelectTab(t.id)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     activeTab === t.id
                       ? "bg-lake-blue-50 text-lake-blue-600"
@@ -208,28 +227,54 @@ export default function App() {
               courses={courses} 
               vocab={vocab} 
               records={records} 
-              onSelectTab={setActiveTab}
+              onSelectTab={handleSelectTab}
               onSelectCourse={handleSelectCourseFromDashboard}
               user={user}
               todaySentencesCount={todaySentencesCount}
             />
           )}
 
-          {activeTab === "upload" && (
-            <UploadLesson 
-              user={user}
-              onNoteSaved={refreshData}
-              onVocabAdded={refreshData}
-            />
-          )}
-
           {activeTab === "coursebook" && (
-            <CourseBook 
-              courses={courses}
-              user={user}
-              onRefresh={refreshData}
-              onVocabAdded={refreshData}
-            />
+            <div className="space-y-6">
+              {/* Inner Tabs for CourseBook */}
+              <div className="flex bg-slate-100 p-1 rounded-2xl max-w-xs sm:max-w-sm">
+                <button
+                  onClick={() => setCoursebookTab("notes")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                    coursebookTab === "notes"
+                      ? "bg-white text-lake-blue-800 shadow-sm font-extrabold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  我的课本
+                </button>
+                <button
+                  onClick={() => setCoursebookTab("upload")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                    coursebookTab === "upload"
+                      ? "bg-white text-lake-blue-800 shadow-sm font-extrabold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  AI 课文解析
+                </button>
+              </div>
+
+              {coursebookTab === "notes" ? (
+                <CourseBook 
+                  courses={courses}
+                  user={user}
+                  onRefresh={refreshData}
+                  onVocabAdded={refreshData}
+                />
+              ) : (
+                <UploadLesson 
+                  user={user}
+                  onNoteSaved={refreshData}
+                  onVocabAdded={refreshData}
+                />
+              )}
+            </div>
           )}
 
           {activeTab === "vocab" && (
@@ -241,18 +286,45 @@ export default function App() {
           )}
 
           {activeTab === "practice" && (
-            <GrammarPractice 
-              user={user}
-              onRefreshStats={refreshData}
-            />
-          )}
+            <div className="space-y-6">
+              {/* Inner Tabs for Practice */}
+              <div className="flex bg-slate-100 p-1 rounded-2xl max-w-xs sm:max-w-sm">
+                <button
+                  onClick={() => setPracticeSubTab("grammar")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                    practiceSubTab === "grammar"
+                      ? "bg-white text-lake-blue-800 shadow-sm font-extrabold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  语法专项
+                </button>
+                <button
+                  onClick={() => setPracticeSubTab("sentence")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                    practiceSubTab === "sentence"
+                      ? "bg-white text-lake-blue-800 shadow-sm font-extrabold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  每日造句
+                </button>
+              </div>
 
-          {activeTab === "dailysentence" && (
-            <DailySentence 
-              vocab={vocab}
-              user={user}
-              onRefreshStats={refreshData}
-            />
+              {practiceSubTab === "grammar" ? (
+                <GrammarPractice 
+                  vocab={vocab}
+                  user={user}
+                  onRefreshStats={refreshData}
+                />
+              ) : (
+                <DailySentence 
+                  vocab={vocab}
+                  user={user}
+                  onRefreshStats={refreshData}
+                />
+              )}
+            </div>
           )}
 
           {activeTab === "settings" && (
@@ -268,21 +340,19 @@ export default function App() {
 
       {/* 3. Mobile Navigation Bottom Rail (only visible on small viewports) */}
       <footer className="lg:hidden bg-white border-t border-slate-100 sticky bottom-0 z-50 shadow-lg">
-        <div className="grid grid-cols-7 h-16">
+        <div className="grid grid-cols-5 h-16">
           {[
             { id: "home", label: "首页", icon: Compass },
-            { id: "upload", label: "上传", icon: Upload },
             { id: "coursebook", label: "课本", icon: BookOpen },
             { id: "vocab", label: "生词", icon: BookMarked },
-            { id: "practice", label: "语法", icon: GraduationCap },
-            { id: "dailysentence", label: "造句", icon: PenTool },
+            { id: "practice", label: "训练", icon: GraduationCap },
             { id: "settings", label: "设置", icon: Settings2 },
           ].map((t) => {
             const IconComp = t.icon;
             return (
               <button
                 key={t.id}
-                onClick={() => setActiveTab(t.id)}
+                onClick={() => handleSelectTab(t.id)}
                 className={`flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                   activeTab === t.id
                     ? "text-lake-blue-600"

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { CourseNote, VocabularyWord } from "../types";
-import { deleteCourseNote, saveVocabularyWord, saveExerciseRecord } from "../lib/sync";
+import { CourseNote, VocabularyWord, FillBlankQuestion, ConjugationTable, TranslationQuestion } from "../types";
+import { deleteCourseNote, saveVocabularyWord, saveExerciseRecord, saveCourseNote, loadVocabularyWords } from "../lib/sync";
 import { 
   BookOpen, 
   Trash2, 
@@ -14,7 +14,10 @@ import {
   Loader2,
   ThumbsUp,
   XCircle,
-  Play
+  Play,
+  Upload,
+  AlertCircle,
+  CheckCircle2
 } from "lucide-react";
 
 interface CourseBookProps {
@@ -41,7 +44,24 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
   const [savedVocabIds, setSavedVocabIds] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // JSON Import States
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [importJsonText, setImportJsonText] = useState("");
+  const [importError, setImportError] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importSuccess, setImportSuccess] = useState("");
+
   const finnishChars = ["ä", "ö", "å", "Ä", "Ö", "Å"];
+
+  // Helper function to check if user's answer matches the correct answer (supports string or array of strings)
+  const isAnswerCorrect = (userVal: string, correctVal: string | string[]): boolean => {
+    if (!userVal || !correctVal) return false;
+    const userClean = userVal.trim().toLowerCase();
+    if (Array.isArray(correctVal)) {
+      return correctVal.some(v => v.trim().toLowerCase() === userClean);
+    }
+    return String(correctVal).trim().toLowerCase() === userClean;
+  };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -110,9 +130,8 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
     const fillBlanks = selectedCourse.exercises?.fillBlanks || [];
     fillBlanks.forEach((q) => {
       totalQuestions++;
-      const userAns = (blankAnswers[q.id] || "").trim().toLowerCase();
-      const correctAns = q.answer.trim().toLowerCase();
-      if (userAns === correctAns) {
+      const userAns = (blankAnswers[q.id] || "");
+      if (isAnswerCorrect(userAns, q.answer)) {
         totalScore++;
       }
     });
@@ -124,9 +143,9 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
       const tableAnswers = conjugationAnswers[table.id] || {};
       pronouns.forEach((p) => {
         totalQuestions++;
-        const userAns = (tableAnswers[p] || "").trim().toLowerCase();
-        const correctAns = (table.pronouns as any)[p].trim().toLowerCase();
-        if (userAns === correctAns) {
+        const userAns = (tableAnswers[p] || "");
+        const correctAns = (table.pronouns as any)[p];
+        if (isAnswerCorrect(userAns, correctAns)) {
           totalScore++;
         }
       });
@@ -401,7 +420,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                   <div className="space-y-5">
                     {selectedCourse.exercises.fillBlanks.map((q, idx) => {
                       const userAns = blankAnswers[q.id] || "";
-                      const isCorrect = userAns.trim().toLowerCase() === q.answer.trim().toLowerCase();
+                      const isCorrect = isAnswerCorrect(userAns, q.answer);
                       return (
                         <div key={q.id} className="space-y-2 p-4 rounded-xl border border-transparent hover:bg-slate-50/50 hover:border-slate-100">
                           <p className="text-base font-semibold text-slate-800">
@@ -440,7 +459,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                             }`}>
                               <div className="flex items-center gap-1 font-bold">
                                 {isCorrect ? <ThumbsUp className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                                {isCorrect ? "打对啦！" : `答错了。正确变格是: ${q.answer}`}
+                                {isCorrect ? "打对啦！" : `答错了。正确变格是: ${Array.isArray(q.answer) ? q.answer.join(" 或 ") : q.answer}`}
                               </div>
                               <p className="mt-1 text-slate-500 font-medium font-sans">解释提示：{q.hint}</p>
                             </div>
@@ -474,7 +493,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                           const tableAns = conjugationAnswers[table.id] || {};
                           const userVal = tableAns[p] || "";
                           const correctVal = (table.pronouns as any)[p];
-                          const isCorrect = userVal.trim().toLowerCase() === correctVal.trim().toLowerCase();
+                          const isCorrect = isAnswerCorrect(userVal, correctVal);
 
                           return (
                             <div key={p} className="space-y-1 bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
@@ -508,7 +527,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                               />
                               {exerciseSubmitted && !isCorrect && (
                                 <p className="text-[10px] text-red-500 font-bold text-center mt-0.5">
-                                  答案: {correctVal}
+                                  答案: {Array.isArray(correctVal) ? correctVal.join(" / ") : correctVal}
                                 </p>
                               )}
                             </div>
@@ -617,14 +636,398 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
     );
   }
 
+  const handleImportJson = async () => {
+    setImportError("");
+    setImportSuccess("");
+    if (!importJsonText.trim()) {
+      setImportError("请输入或粘贴要导入的词库 JSON 内容。");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      let parsed: any;
+      try {
+        parsed = JSON.parse(importJsonText.trim());
+      } catch (jsonErr: any) {
+        throw new Error(`JSON 语法解析错误: ${jsonErr.message}`);
+      }
+
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("格式校验错误: 导入的 JSON 必须是一个对象。");
+      }
+
+      if (!parsed.lesson && (!parsed.words || !Array.isArray(parsed.words))) {
+        throw new Error("格式校验错误: JSON 中必须含有 'lesson' 对象或 'words' 数组。");
+      }
+
+      // Map unique words to avoid duplicate lemma upserts within the same import payload
+      const uniqueImportWordsMap = new Map<string, any>();
+      if (parsed.words && Array.isArray(parsed.words)) {
+        for (const w of parsed.words) {
+          if (w.lemma) {
+            uniqueImportWordsMap.set(w.lemma.toLowerCase().trim(), w);
+          } else {
+            throw new Error("格式校验错误: 'words' 数组中的所有单词都必须包含 'lemma' 字段。");
+          }
+        }
+      }
+      const uniqueImportWords = Array.from(uniqueImportWordsMap.values());
+
+      let courseId = `course_imported_${Date.now()}`;
+      let lessonTitle = "未命名导入课程";
+
+      // Helper function to map pos
+      const mapPartOfSpeech = (pos: string): string => {
+        if (!pos) return "其他";
+        const p = pos.toLowerCase().trim();
+        if (p === "verb" || p === "动词") return "动词";
+        if (p === "noun" || p === "名词") return "名词";
+        if (p === "adj" || p === "形容词" || p === "adjective") return "形容词";
+        if (p === "adv" || p === "副词" || p === "adverb") return "副词";
+        if (p === "pron" || p === "代词" || p === "pronoun") return "代词";
+        if (p === "prep" || p === "介词" || p === "preposition") return "介词";
+        if (p === "postp" || p === "后置词" || p === "postposition") return "后置词";
+        return pos;
+      };
+
+      // Helper function to build key inflections string
+      const constructKeyInflections = (word: any): string => {
+        const forms = word.forms;
+        if (!forms) return "";
+        
+        if (word.verbType && forms.present) {
+          const p = forms.present;
+          const m = Array.isArray(p.minä) ? p.minä[0] : p.minä;
+          const s = Array.isArray(p.sinä) ? p.sinä[0] : p.sinä;
+          const h = Array.isArray(p.hän) ? p.hän[0] : p.hän;
+          return `${m || "-"}, ${s || "-"}, ${h || "-"} (Type ${word.verbType})`;
+        } else if (forms.gen_sg || forms.part_sg) {
+          const g = Array.isArray(forms.gen_sg) ? forms.gen_sg[0] : forms.gen_sg;
+          const p = Array.isArray(forms.part_sg) ? forms.part_sg[0] : forms.part_sg;
+          return `属格: ${g || "-"}, 部分格: ${p || "-"}`;
+        }
+        return "";
+      };
+
+      // Helper function to build word inflections object
+      const buildWordInflections = (word: any): any => {
+        const forms = word.forms;
+        if (!forms) return undefined;
+        
+        const inflections: any = {
+          word: word.lemma,
+          partOfSpeech: mapPartOfSpeech(word.pos),
+        };
+        
+        if (word.verbType !== undefined) {
+          inflections.verbType = Number(word.verbType);
+        }
+        
+        if (forms.present) {
+          inflections.conjugations = {
+            minä: forms.present.minä || "",
+            sinä: forms.present.sinä || "",
+            hän: forms.present.hän || "",
+            me: forms.present.me || "",
+            te: forms.present.te || "",
+            he: forms.present.he || "",
+          };
+        }
+        
+        if (forms.inf1) {
+          inflections.firstInfinitive = forms.inf1;
+        }
+        
+        if (forms.inf2_ine || forms.inf2_ins) {
+          inflections.secondInfinitive = {
+            inessive: forms.inf2_ine || "",
+            instructive: forms.inf2_ins || "",
+          };
+        }
+        
+        if (forms.inf3_ine || forms.inf3_ela || forms.inf3_ill || forms.inf3_ade || forms.inf3_abe) {
+          inflections.thirdInfinitive = {
+            inessive: forms.inf3_ine || "",
+            elative: forms.inf3_ela || "",
+            illative: forms.inf3_ill || "",
+            adessive: forms.inf3_ade || "",
+            abessive: forms.inf3_abe || "",
+          };
+        }
+        
+        if (forms.gen_sg || forms.gen_pl || forms.part_sg || forms.part_pl || forms.nom_pl) {
+          inflections.nounInflections = {
+            singularGenitive: forms.gen_sg || "",
+            pluralGenitive: forms.gen_pl || "",
+            singularPartitive: forms.part_sg || "",
+            pluralPartitive: forms.part_pl || "",
+            pluralNominative: forms.nom_pl || "",
+          };
+        }
+        
+        return inflections;
+      };
+
+      if (parsed.lesson) {
+        const lesson = parsed.lesson;
+        lessonTitle = lesson.title || "导入的课程";
+        courseId = "course_imported_" + lessonTitle.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
+        
+        const mappedGrammarPoints = (lesson.grammar || []).map((pt: any, index: number) => {
+          let ruleStr = pt.rule || "";
+          if (pt.ending) ruleStr += `\n词尾特征: ${pt.ending}`;
+          if (pt.pitfalls) ruleStr += `\n注意避坑: ${pt.pitfalls}`;
+          if (pt.kpt) ruleStr += `\n辅音交替 (KPT): ${pt.kpt}`;
+          if (pt.source) ruleStr += `\n来源: ${pt.source}`;
+          
+          return {
+            title: pt.point || `语法点 ${index + 1}`,
+            level: pt.level === "B1" ? "B1" : "A2",
+            rule: ruleStr,
+            examples: (pt.examples || []).map((ex: any) => ({
+              finnish: ex.fi || "",
+              chinese: ex.zh || ""
+            }))
+          };
+        });
+        
+        const courseVocabList = uniqueImportWords.map(word => ({
+          word: word.lemma,
+          partOfSpeech: mapPartOfSpeech(word.pos),
+          translation: word.zh,
+          exampleSentence: word.example?.fi || "",
+          translationExample: word.example?.zh || "",
+          keyInflections: constructKeyInflections(word),
+          inflections: buildWordInflections(word),
+        }));
+
+        // Generate matching dynamic interactive exercise blanks & conjugations
+        const fillBlanks: FillBlankQuestion[] = [];
+        const conjugations: ConjugationTable[] = [];
+        const translations: TranslationQuestion[] = [];
+        
+        const verbs = uniqueImportWords.filter(w => w.pos?.toLowerCase() === "verb" && w.forms?.present);
+        verbs.slice(0, 3).forEach((v, index) => {
+          const p = v.forms.present;
+          const minäVal = Array.isArray(p.minä) ? p.minä[0] : p.minä;
+          if (minäVal) {
+            fillBlanks.push({
+              id: `blank_imp_${index}`,
+              sentence: `Minä ___ (${v.lemma}) suomea.`,
+              answer: minäVal,
+              hint: `人称 minä 的现在时变位形式`
+            });
+          }
+          conjugations.push({
+            id: `conj_imp_${index}`,
+            title: `动词 '${v.lemma}' 现在时变位表`,
+            verb: v.lemma,
+            verbClass: v.verbType ? `Type ${v.verbType}` : "动词变位",
+            pronouns: {
+              minä: Array.isArray(p.minä) ? p.minä[0] : p.minä || "",
+              sinä: Array.isArray(p.sinä) ? p.sinä[0] : p.sinä || "",
+              hän: Array.isArray(p.hän) ? p.hän[0] : p.hän || "",
+              me: Array.isArray(p.me) ? p.me[0] : p.me || "",
+              te: Array.isArray(p.te) ? p.te[0] : p.te || "",
+              he: Array.isArray(p.he) ? p.he[0] : p.he || "",
+            }
+          });
+        });
+
+        const nouns = uniqueImportWords.filter(w => (w.pos?.toLowerCase() === "noun" || w.pos?.toLowerCase() === "adj") && w.forms);
+        nouns.slice(0, 2).forEach((n, index) => {
+          const f = n.forms;
+          const gs = Array.isArray(f.gen_sg) ? f.gen_sg[0] : f.gen_sg;
+          if (gs) {
+            fillBlanks.push({
+              id: `blank_imp_n_${index}`,
+              sentence: `Tämä on ___ (${n.lemma}) kirja.`,
+              answer: gs,
+              hint: `${n.lemma} 的单数属格 (genitiivi) 形式`
+            });
+          }
+        });
+        
+        const fullNote: CourseNote = {
+          id: courseId,
+          userId: user ? user.uid : "guest",
+          date: lesson.date || new Date().toISOString().split("T")[0],
+          title: lessonTitle,
+          keyPoints: lesson.summary || [],
+          grammarPoints: mappedGrammarPoints,
+          vocabulary: courseVocabList,
+          exercises: {
+            fillBlanks,
+            conjugations,
+            translations
+          },
+          createdAt: new Date().toISOString(),
+        };
+
+        await saveCourseNote(fullNote, user);
+      }
+
+      // Upsert words list into Firestore / localStorage (with SM-2 learning metrics preservation!)
+      if (uniqueImportWords.length > 0) {
+        const existingVocabs = await loadVocabularyWords(user);
+        
+        for (const word of uniqueImportWords) {
+          const lemma = word.lemma;
+          const pos = word.pos;
+          const zh = word.zh;
+          
+          const existing = existingVocabs.find(v => v.word.toLowerCase() === lemma.toLowerCase().trim());
+          
+          let vocabWord: VocabularyWord;
+          if (existing) {
+            vocabWord = {
+              ...existing,
+              partOfSpeech: mapPartOfSpeech(pos),
+              translation: zh,
+              exampleSentence: word.example?.fi || "",
+              translationExample: word.example?.zh || "",
+              keyInflections: constructKeyInflections(word),
+              sourceCourseId: courseId,
+              sourceCourseTitle: lessonTitle,
+              inflections: buildWordInflections(word),
+            };
+          } else {
+            const wordId = `word_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+            vocabWord = {
+              id: wordId,
+              word: lemma,
+              partOfSpeech: mapPartOfSpeech(pos),
+              translation: zh,
+              exampleSentence: word.example?.fi || "",
+              translationExample: word.example?.zh || "",
+              keyInflections: constructKeyInflections(word),
+              sourceCourseId: courseId,
+              sourceCourseTitle: lessonTitle,
+              addedAt: new Date().toISOString(),
+              intervalDays: 0,
+              easeFactor: 2.5,
+              repetitions: 0,
+              nextReviewAt: new Date().toISOString(),
+              incorrectCount: 0,
+              correctCount: 0,
+              inflections: buildWordInflections(word),
+            };
+          }
+          await saveVocabularyWord(vocabWord, user);
+        }
+      }
+
+      setImportSuccess(`成功导入并更新了 ${uniqueImportWords.length} 个单词，并新增/覆盖了课程：'${lessonTitle}'！`);
+      setImportJsonText("");
+      onRefresh();
+      onVocabAdded();
+      
+      // Auto close panel after 3 seconds
+      setTimeout(() => {
+        setShowImportPanel(false);
+        setImportSuccess("");
+      }, 3500);
+
+    } catch (err: any) {
+      console.error(err);
+      setImportError(err.message || "导入解析失败，请检查您的 JSON 格式。");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h3 className="text-xl font-semibold text-slate-800">我的芬兰语课本</h3>
-        <p className="text-xs text-slate-400 mt-1">
-          这里归档了您所有已解析、总结的上课笔记与对应的课后生成习题。
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-semibold text-slate-800">我的芬兰语课本</h3>
+          <p className="text-xs text-slate-400 mt-1">
+            这里归档了您所有已解析、总结的上课笔记与对应的课后生成习题。
+          </p>
+        </div>
+        <div>
+          <button
+            onClick={() => {
+              setShowImportPanel(!showImportPanel);
+              setImportError("");
+              setImportSuccess("");
+            }}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-lake-blue-300 hover:text-lake-blue-600 rounded-xl text-xs font-bold text-slate-600 shadow-sm transition-all cursor-pointer"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            {showImportPanel ? "收起导入面板" : "导入词库 JSON"}
+          </button>
+        </div>
       </div>
+
+      {showImportPanel && (
+        <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm space-y-4 animate-fade-in">
+          <div className="flex items-start gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <AlertCircle className="w-4 h-4 text-lake-blue-500 shrink-0 mt-0.5" />
+            <div className="text-[11px] leading-relaxed text-slate-500">
+              <span className="font-bold text-slate-700">导入规则说明：</span>
+              粘贴由外部权威工具（如 Omorfi）生成的词库 JSON，系统将自动解析。
+              按 <strong>lemma 词原形去重且就地更新(upsert)</strong>，不会出现单词重复堆叠；若包含课程字段（lesson），将自动创建并更新对应的上课笔记。
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700 block">词库 JSON 内容</label>
+            <textarea
+              value={importJsonText}
+              onChange={(e) => setImportJsonText(e.target.value)}
+              placeholder='在此粘贴您的词库 JSON (e.g. { "lesson": { ... }, "words": [ ... ] })'
+              className="w-full h-44 px-3.5 py-2.5 text-xs font-mono rounded-xl border border-slate-200 focus:outline-none focus:border-lake-blue-500 bg-slate-50/50"
+            />
+          </div>
+
+          {importError && (
+            <div className="flex items-center gap-1.5 p-3 rounded-xl bg-red-50 border border-red-100 text-xs text-red-600 font-medium">
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+              <span>{importError}</span>
+            </div>
+          )}
+
+          {importSuccess && (
+            <div className="flex items-center gap-1.5 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-xs text-emerald-700 font-medium">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{importSuccess}</span>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2.5 pt-1">
+            <button
+              onClick={() => {
+                setShowImportPanel(false);
+                setImportJsonText("");
+                setImportError("");
+                setImportSuccess("");
+              }}
+              className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleImportJson}
+              disabled={importing}
+              className="px-4.5 py-2 bg-lake-blue-600 hover:bg-lake-blue-700 text-white font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 disabled:bg-slate-100 disabled:text-slate-400 cursor-pointer shadow-sm"
+            >
+              {importing ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>正在导入中...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>开始解析导入</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {courses.length === 0 ? (
         <section className="bg-white border border-slate-100 rounded-2xl p-12 text-center flex flex-col items-center justify-center space-y-4 shadow-sm">

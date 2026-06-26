@@ -55,6 +55,16 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
   // Helper characters for Finnish
   const finnishChars = ["ä", "ö", "å", "Ä", "Ö", "Å"];
 
+  // Helper function to check if user's answer matches the correct answer (supports string or array of strings)
+  const isAnswerCorrect = (userVal: string, correctVal: string | string[]): boolean => {
+    if (!userVal || !correctVal) return false;
+    const userClean = userVal.trim().toLowerCase();
+    if (Array.isArray(correctVal)) {
+      return correctVal.some(v => v.trim().toLowerCase() === userClean);
+    }
+    return String(correctVal).trim().toLowerCase() === userClean;
+  };
+
   // Handle Drag & Drop / Click Upload
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -238,9 +248,8 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
     const fillBlanks = parsedResult.exercises?.fillBlanks || [];
     fillBlanks.forEach((q: FillBlankQuestion) => {
       totalQuestions++;
-      const userAns = (blankAnswers[q.id] || "").trim().toLowerCase();
-      const correctAns = q.answer.trim().toLowerCase();
-      if (userAns === correctAns) {
+      const userAns = (blankAnswers[q.id] || "");
+      if (isAnswerCorrect(userAns, q.answer)) {
         totalScore++;
       } else {
         // Find if this is in vocabulary to flag as mistake
@@ -258,9 +267,9 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
       const tableAnswers = conjugationAnswers[table.id] || {};
       pronouns.forEach((p) => {
         totalQuestions++;
-        const userAns = (tableAnswers[p] || "").trim().toLowerCase();
-        const correctAns = (table.pronouns as any)[p].trim().toLowerCase();
-        if (userAns === correctAns) {
+        const userAns = (tableAnswers[p] || "");
+        const correctAns = (table.pronouns as any)[p];
+        if (isAnswerCorrect(userAns, correctAns)) {
           totalScore++;
         } else {
           wrongWords.push({ word: table.verb, verbClass: table.verbClass } as any);
@@ -682,7 +691,7 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
                     <div className="space-y-5">
                       {parsedResult.exercises.fillBlanks.map((q: FillBlankQuestion, idx: number) => {
                         const userAns = blankAnswers[q.id] || "";
-                        const isCorrect = userAns.trim().toLowerCase() === q.answer.trim().toLowerCase();
+                        const isCorrect = isAnswerCorrect(userAns, q.answer);
                         return (
                           <div key={q.id} className="space-y-2 p-4 rounded-xl hover:bg-slate-50/50 transition-colors border border-transparent hover:border-slate-100">
                             <div className="flex items-start gap-3">
@@ -726,7 +735,7 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
                               }`}>
                                 <div className="flex items-center gap-1 font-bold">
                                   {isCorrect ? <ThumbsUp className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                                  {isCorrect ? "答对啦！" : `答错了。正确答案是: ${q.answer}`}
+                                  {isCorrect ? "答对啦！" : `答错了。正确答案是: ${Array.isArray(q.answer) ? q.answer.join(" 或 ") : q.answer}`}
                                 </div>
                                 <p className="mt-1 text-slate-500 font-medium">提示：{q.hint}</p>
                               </div>
@@ -760,7 +769,7 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
                             const tableAns = conjugationAnswers[table.id] || {};
                             const userVal = tableAns[pronoun] || "";
                             const correctVal = (table.pronouns as any)[pronoun];
-                            const isCorrect = userVal.trim().toLowerCase() === correctVal.trim().toLowerCase();
+                            const isCorrect = isAnswerCorrect(userVal, correctVal);
 
                             return (
                               <div key={pronoun} className="space-y-1 bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
@@ -795,7 +804,7 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
                                 />
                                 {exerciseSubmitted && !isCorrect && (
                                   <p className="text-[10px] text-red-500 font-bold text-center mt-0.5">
-                                    答案: {correctVal}
+                                    答案: {Array.isArray(correctVal) ? correctVal.join(" / ") : correctVal}
                                   </p>
                                 )}
                               </div>
