@@ -4,9 +4,8 @@ import {
   setDoc, 
   getDocs, 
   deleteDoc, 
-  query, 
-  where, 
-  orderBy,
+  query,
+  where,
   updateDoc
 } from "firebase/firestore";
 import { db } from "../firebase";
@@ -95,9 +94,12 @@ export async function saveCourseNote(course: CourseNote, user: any): Promise<voi
 // 2. LOAD COURSE NOTES
 export async function loadCourseNotes(user: any): Promise<CourseNote[]> {
   if (user) {
-    const q = query(collection(db, "courses"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
+    // Single-field filter only (no orderBy) so no composite index is required;
+    // sort client-side instead.
+    const q = query(collection(db, "courses"), where("userId", "==", user.uid));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data() as CourseNote);
+    const list = snapshot.docs.map(doc => doc.data() as CourseNote);
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } else {
     const list = getLocal<CourseNote>(LOCAL_COURSES);
     // Sort descending by createdAt
@@ -195,13 +197,10 @@ export async function saveDailySentence(sentence: any, user: any): Promise<void>
 // 10. LOAD DAILY SENTENCES FOR DATE
 export async function loadDailySentences(user: any, dateStr: string): Promise<any[]> {
   if (user) {
-    const q = query(
-      collection(db, "daily_sentences"), 
-      where("userId", "==", user.uid),
-      where("date", "==", dateStr)
-    );
+    // Single-field filter only (no composite index); filter the date in JS.
+    const q = query(collection(db, "daily_sentences"), where("userId", "==", user.uid));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data());
+    return snapshot.docs.map(doc => doc.data()).filter((s: any) => s.date === dateStr);
   } else {
     const list = getLocal<any>("fi_daily_sentences");
     return list.filter(s => s.date === dateStr);
