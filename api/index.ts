@@ -35,10 +35,16 @@ const db = getFirestore(DATABASE_ID);
 async function getActiveGeminiKeys(): Promise<string[]> {
   const keys: string[] = [];
 
-  // 1. Add standard env key if present
-  if (process.env.GEMINI_API_KEY) {
-    keys.push(process.env.GEMINI_API_KEY);
-  }
+  // 1. Add env key(s) if present. GEMINI_API_KEY (or GEMINI_API_KEYS) may hold
+  // several keys separated by commas/whitespace for round-robin rotation.
+  const envKeys = `${process.env.GEMINI_API_KEY || ""} ${process.env.GEMINI_API_KEYS || ""}`;
+  envKeys
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .forEach((k) => {
+      if (!keys.includes(k)) keys.push(k);
+    });
 
   // 2. Load keys from Firestore
   try {
