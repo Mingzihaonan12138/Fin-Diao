@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Validation Blueprints
+    function isValidCourse(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId == request.auth.uid
+        && data.title is string && data.title.size() <= 200
+        && data.date is string && data.date.size() <= 10;
+    }
+
+    function isValidVocabulary(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId == request.auth.uid
+        && data.word is string && data.word.size() <= 100
+        && data.translation is string && data.translation.size() <= 300;
+    }
+
+    function isValidRecord(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId == request.auth.uid
+        && data.courseId is string && data.courseId.size() <= 128
+        && data.score is int && data.total is int;
+    }
+
+    function isValidDailySentence(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId == request.auth.uid
+        && data.date is string && data.date.size() == 10
+        && data.word is string && data.word.size() <= 100;
+    }
+
+    // Collection: Courses
+    match /courses/{courseId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(courseId) && isValidCourse(request.resource.data);
+      allow update: if isSignedIn() && isValidId(courseId) && resource.data.userId == request.auth.uid && isValidCourse(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(courseId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Collection: Vocabulary
+    match /vocabulary/{vocabId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(vocabId) && isValidVocabulary(request.resource.data);
+      allow update: if isSignedIn() && isValidId(vocabId) && resource.data.userId == request.auth.uid && isValidVocabulary(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(vocabId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Collection: Exercise Records
+    match /exercise_records/{recordId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(recordId) && isValidRecord(request.resource.data);
+      allow update: if isSignedIn() && isValidId(recordId) && resource.data.userId == request.auth.uid && isValidRecord(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(recordId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Collection: Daily Sentences
+    match /daily_sentences/{sentenceId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(sentenceId) && isValidDailySentence(request.resource.data);
+      allow update: if isSignedIn() && isValidId(sentenceId) && resource.data.userId == request.auth.uid && isValidDailySentence(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(sentenceId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Collection: Word Inflections Cache (Read-only for clients, populated by server Admin SDK)
+    match /word_inflections_cache/{wordId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // Collection: Gemini Keys (Server-side admin only, clients cannot access)
+    match /gemini_keys/{keyId} {
+      allow read, write: if false;
+    }
+  }
+}

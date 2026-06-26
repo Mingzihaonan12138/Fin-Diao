@@ -1,0 +1,194 @@
+{
+  "entities": {
+    "CourseNote": {
+      "title": "CourseNote",
+      "description": "User notes uploaded and summarized by AI, including key points, grammar, vocabulary, and quizzes.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "title": { "type": "string" },
+        "keyPoints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "grammarPoints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "level": { "type": "string", "enum": ["A2", "B1"] },
+              "rule": { "type": "string" },
+              "examples": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "finnish": { "type": "string" },
+                    "chinese": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "vocabulary": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "word": { "type": "string" },
+              "partOfSpeech": { "type": "string" },
+              "translation": { "type": "string" },
+              "exampleSentence": { "type": "string" },
+              "translationExample": { "type": "string" },
+              "keyInflections": { "type": "string" }
+            }
+          }
+        },
+        "exercises": {
+          "type": "object",
+          "properties": {
+            "fillBlanks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "sentence": { "type": "string" },
+                  "answer": { "type": "string" },
+                  "hint": { "type": "string" }
+                }
+              }
+            },
+            "conjugations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "title": { "type": "string" },
+                  "verb": { "type": "string" },
+                  "verbClass": { "type": "string" },
+                  "pronouns": {
+                    "type": "object",
+                    "properties": {
+                      "minä": { "type": "string" },
+                      "sinä": { "type": "string" },
+                      "hän": { "type": "string" },
+                      "me": { "type": "string" },
+                      "te": { "type": "string" },
+                      "he": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            },
+            "translations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "chinese": { "type": "string" },
+                  "finnish": { "type": "string" },
+                  "selfCheckpoints": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "date", "title", "createdAt"]
+    },
+    "VocabularyWord": {
+      "title": "VocabularyWord",
+      "description": "Vocabulary words saved in the user's personal vocabulary book with spaced repetition progress.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "word": { "type": "string" },
+        "partOfSpeech": { "type": "string" },
+        "translation": { "type": "string" },
+        "exampleSentence": { "type": "string" },
+        "translationExample": { "type": "string" },
+        "keyInflections": { "type": "string" },
+        "sourceCourseId": { "type": "string" },
+        "sourceCourseTitle": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" },
+        "intervalDays": { "type": "number" },
+        "easeFactor": { "type": "number" },
+        "repetitions": { "type": "number" },
+        "nextReviewAt": { "type": "string", "format": "date-time" },
+        "isMistake": { "type": "boolean" },
+        "incorrectCount": { "type": "number" },
+        "correctCount: ": { "type": "number" }
+      },
+      "required": ["id", "userId", "word", "partOfSpeech", "translation", "addedAt"]
+    },
+    "ExerciseRecord": {
+      "title": "ExerciseRecord",
+      "description": "Historical logs of user answers and quiz scores.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "courseTitle": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "score": { "type": "number" },
+        "total": { "type": "number" },
+        "details": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "courseId", "date", "score", "total"]
+    },
+    "DailySentence": {
+      "title": "DailySentence",
+      "description": "Progress record of daily sentence practice for a user on a given day.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "word": { "type": "string" },
+        "translation": { "type": "string" },
+        "userSentence": { "type": "string" },
+        "referenceSentence": { "type": "string" },
+        "referenceTranslation": { "type": "string" },
+        "selfCheckpoints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "date", "word", "completed"]
+    }
+  },
+  "firestore": {
+    "/courses/{courseId}": {
+      "schema": "CourseNote",
+      "description": "Collection of summarized lessons."
+    },
+    "/vocabulary/{vocabId}": {
+      "schema": "VocabularyWord",
+      "description": "Collection of words saved to user vocabulary book."
+    },
+    "/exercise_records/{recordId}": {
+      "schema": "ExerciseRecord",
+      "description": "Collection of completed course quiz scores."
+    },
+    "/daily_sentences/{sentenceId}": {
+      "schema": "DailySentence",
+      "description": "Collection of user's daily written sentence practices."
+    }
+  }
+}

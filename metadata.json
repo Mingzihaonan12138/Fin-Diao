@@ -1,0 +1,6 @@
+{
+  "name": "芬兰语学习助手",
+  "description": "专为 A2/B1 级别设计的芬兰语学习工具，支持上传材料 AI 总结、语法练习、生词本与错词本管理，支持云端同步与多 API 密钥轮询保护。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
