@@ -679,8 +679,77 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
         throw new Error("格式校验错误: 导入的 JSON 必须是一个对象。");
       }
 
+      // —— 课程格式分支：直接是课程对象 / 课程数组 / { lessons: [...] } ——
+      // （由 Claude + Omorfi 流水线产出，vocabulary 已是 App 内部结构，无需再映射）
+      const lessonsArr: any[] | null = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray((parsed as any).lessons)
+          ? (parsed as any).lessons
+          : ((parsed as any).vocabulary || (parsed as any).fillBlanks || (parsed as any).grammarPoints)
+            ? [parsed]
+            : null;
+      if (lessonsArr) {
+        let cc = 0;
+        let vc = 0;
+        for (const L of lessonsArr) {
+          const cid = `course_${L.topic || "lesson"}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const course: CourseNote = {
+            id: cid,
+            userId: user ? user.uid : "guest",
+            date: L.date || new Date().toISOString().split("T")[0],
+            title: L.title || "导入课程",
+            keyPoints: L.keyPoints || [],
+            grammarPoints: L.grammarPoints || [],
+            vocabulary: L.vocabulary || [],
+            exercises: {
+              fillBlanks: L.fillBlanks || L.exercises?.fillBlanks || [],
+              conjugations: (L.conjugations || L.exercises?.conjugations || []).filter(
+                (c: any) => c && c.pronouns && c.pronouns["minä"]
+              ),
+              translations: L.translations || L.exercises?.translations || [],
+            },
+            createdAt: new Date().toISOString(),
+          };
+          await saveCourseNote(course, user);
+          cc++;
+          for (const w of L.vocabulary || []) {
+            if (!w || !w.word) continue;
+            const vw: VocabularyWord = {
+              id: `word_${String(w.word).trim().toLowerCase()}`,
+              word: w.word,
+              partOfSpeech: w.partOfSpeech || "",
+              translation: w.translation || "",
+              exampleSentence: w.exampleSentence || "",
+              translationExample: w.translationExample || "",
+              keyInflections: w.keyInflections || "",
+              sourceCourseId: cid,
+              sourceCourseTitle: course.title,
+              addedAt: new Date().toISOString(),
+              intervalDays: 0,
+              easeFactor: 2.5,
+              repetitions: 0,
+              nextReviewAt: new Date().toISOString(),
+              incorrectCount: 0,
+              correctCount: 0,
+              inflections: w.inflections,
+            };
+            await saveVocabularyWord(vw, user);
+            vc++;
+          }
+        }
+        setImportSuccess(`成功导入 ${cc} 节课、${vc} 个生词！可在下方课本列表与「生词错词」查看。`);
+        setImportJsonText("");
+        onRefresh();
+        onVocabAdded();
+        setTimeout(() => {
+          setShowImportPanel(false);
+          setImportSuccess("");
+        }, 3500);
+        return;
+      }
+
       if (!parsed.lesson && (!parsed.words || !Array.isArray(parsed.words))) {
-        throw new Error("格式校验错误: JSON 中必须含有 'lesson' 对象或 'words' 数组。");
+        throw new Error("格式校验错误: JSON 中必须含有课程字段（title/vocabulary）、'lesson' 对象或 'words' 数组。");
       }
 
       // Map unique words to avoid duplicate lemma upserts within the same import payload
