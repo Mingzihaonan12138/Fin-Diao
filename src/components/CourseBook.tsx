@@ -984,7 +984,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
               inflections: buildWordInflections(word),
             };
           } else {
-            const wordId = `word_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+            const wordId = `word_${String(lemma).trim().toLowerCase()}`; // 按原型确定编号，与课程导入一致，避免重复
             vocabWord = {
               id: wordId,
               word: lemma,
