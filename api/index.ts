@@ -1,6 +1,6 @@
 import express from "express";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { Firestore, getFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI } from "@google/genai";
 
 // Self-contained Vercel serverless entry. Everything lives in this single
@@ -11,24 +11,31 @@ import { GoogleGenAI } from "@google/genai";
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "fin-diao";
 const DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || "(default)";
 
-// Initialize Admin SDK once. On platforms without Application Default
-// Credentials (e.g. Vercel), supply a service account JSON via the
-// FIREBASE_SERVICE_ACCOUNT env var so Firestore access keeps working.
-if (!getApps().length) {
-  const svcAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (svcAccountRaw) {
-    try {
+// Initialize Admin SDK only when credentials are available. Vercel does not
+// provide Application Default Credentials by default, so blindly initializing
+// Firestore can crash the serverless function on the first query.
+let db: Firestore | null = null;
+const svcAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
+const hasApplicationCredentials = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+
+try {
+  if (!getApps().length) {
+    if (svcAccountRaw) {
       initializeApp({ credential: cert(JSON.parse(svcAccountRaw)), projectId: PROJECT_ID });
-    } catch (err) {
-      console.error("Invalid FIREBASE_SERVICE_ACCOUNT, using default credentials:", err);
+    } else if (hasApplicationCredentials) {
       initializeApp({ projectId: PROJECT_ID });
     }
-  } else {
-    initializeApp({ projectId: PROJECT_ID });
   }
-}
 
-const db = DATABASE_ID && DATABASE_ID !== "(default)" ? getFirestore(DATABASE_ID) : getFirestore();
+  if (getApps().length && (svcAccountRaw || hasApplicationCredentials)) {
+    db = DATABASE_ID && DATABASE_ID !== "(default)" ? getFirestore(DATABASE_ID) : getFirestore();
+  } else {
+    console.warn("Firebase Admin credentials not found. Server-side key storage and cache are disabled.");
+  }
+} catch (err) {
+  console.error("Failed to initialize Firebase Admin. Server-side key storage and cache are disabled:", err);
+  db = null;
+}
 
 // Helper: load all active keys for round-robin
 async function getActiveGeminiKeys(): Promise<string[]> {
@@ -45,17 +52,19 @@ async function getActiveGeminiKeys(): Promise<string[]> {
       if (!keys.includes(k)) keys.push(k);
     });
 
-  // 2. Load keys from Firestore
-  try {
-    const snapshot = await db.collection("gemini_keys").get();
-    snapshot.docs.forEach((doc) => {
-      const data = doc.data();
-      if (data.key && typeof data.key === "string" && !keys.includes(data.key)) {
-        keys.push(data.key);
-      }
-    });
-  } catch (err) {
-    console.error("Error loading extra API keys from Firestore:", err);
+  // 2. Load keys from Firestore when server credentials are configured.
+  if (db) {
+    try {
+      const snapshot = await db.collection("gemini_keys").get();
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        if (data.key && typeof data.key === "string" && !keys.includes(data.key)) {
+          keys.push(data.key);
+        }
+      });
+    } catch (err) {
+      console.error("Error loading extra API keys from Firestore:", err);
+    }
   }
 
   return keys.filter(Boolean);
@@ -162,12 +171,21 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Health check route
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", projectId: PROJECT_ID, databaseId: DATABASE_ID });
+  res.json({
+    status: "ok",
+    projectId: PROJECT_ID,
+    databaseId: DATABASE_ID,
+    adminFirestoreEnabled: Boolean(db),
+    geminiEnvKeyConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS),
+  });
 });
 
 // API Key Management (Server-side Firestore backend, never exposes actual keys to frontend)
 app.get("/api/keys", async (req, res) => {
   try {
+    if (!db) {
+      return res.json([]);
+    }
     const snapshot = await db.collection("gemini_keys").orderBy("addedAt", "desc").get();
     const keysList = snapshot.docs.map((doc) => {
       const data = doc.data();
@@ -186,6 +204,11 @@ app.get("/api/keys", async (req, res) => {
 
 app.post("/api/keys", async (req, res) => {
   try {
+    if (!db) {
+      return res.status(503).json({
+        error: "服务器尚未配置 Firebase Admin 凭据，无法保存备用密钥。请使用 GEMINI_API_KEY 环境变量，或配置 FIREBASE_SERVICE_ACCOUNT。",
+      });
+    }
     const { key } = req.body;
     if (!key || typeof key !== "string" || !key.startsWith("AIzaSy")) {
       return res.status(400).json({ error: "无效的 Google Gemini API Key。它应该以 'AIzaSy' 开头。" });
@@ -205,6 +228,11 @@ app.post("/api/keys", async (req, res) => {
 
 app.delete("/api/keys/:id", async (req, res) => {
   try {
+    if (!db) {
+      return res.status(503).json({
+        error: "服务器尚未配置 Firebase Admin 凭据，无法删除备用密钥。",
+      });
+    }
     const { id } = req.params;
     await db.collection("gemini_keys").doc(id).delete();
     res.json({ message: "密钥已成功从轮询池移除。" });
@@ -303,7 +331,7 @@ app.post("/api/upload", async (req, res) => {
     try {
       const parsedResult = JSON.parse(cleanJson);
 
-      if (parsedResult && parsedResult.vocabulary && Array.isArray(parsedResult.vocabulary)) {
+      if (db && parsedResult && parsedResult.vocabulary && Array.isArray(parsedResult.vocabulary)) {
         for (const item of parsedResult.vocabulary) {
           if (item.word && item.inflections) {
             try {

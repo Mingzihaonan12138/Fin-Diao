@@ -11,6 +11,7 @@ interface SettingsProps {
 
 export default function Settings({ user, loading, onEnterGuestMode, isGuest }: SettingsProps) {
   const [keys, setKeys] = useState<{ id: string; maskedKey: string; addedAt: string }[]>([]);
+  const [systemKeyConfigured, setSystemKeyConfigured] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [fetchingKeys, setFetchingKeys] = useState(false);
   const [addingKey, setAddingKey] = useState(false);
@@ -21,9 +22,16 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
   const fetchKeys = async () => {
     setFetchingKeys(true);
     try {
-      const res = await fetch("/api/keys");
-      if (res.ok) {
-        const data = await res.json();
+      const [healthRes, keysRes] = await Promise.all([
+        fetch("/api/health"),
+        fetch("/api/keys"),
+      ]);
+      if (healthRes.ok) {
+        const health = await healthRes.json();
+        setSystemKeyConfigured(Boolean(health.geminiEnvKeyConfigured));
+      }
+      if (keysRes.ok) {
+        const data = await keysRes.json();
         setKeys(data);
       }
     } catch (err) {
@@ -181,23 +189,29 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
         {/* Key List Table */}
         <div className="space-y-3">
           <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-            当前服务器密钥池 ({keys.length + 1} 个密钥)
+            当前服务器密钥池 ({keys.length + (systemKeyConfigured ? 1 : 0)} 个密钥)
           </h4>
 
           <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden bg-slate-50/50">
             {/* Standard Key (Env key - not deletable) */}
-            <div className="flex justify-between items-center px-4 py-3 bg-white">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                <span className="font-mono text-xs font-medium text-slate-500">
-                  SYSTEM_DEFAULT_KEY (系统内置主密钥)
-                </span>
-                <span className="text-[10px] bg-slate-100 text-slate-500 font-semibold px-2 py-0.5 rounded-md">
-                  默认启用
-                </span>
+            {systemKeyConfigured ? (
+              <div className="flex justify-between items-center px-4 py-3 bg-white">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                  <span className="font-mono text-xs font-medium text-slate-500">
+                    SYSTEM_DEFAULT_KEY (系统内置主密钥)
+                  </span>
+                  <span className="text-[10px] bg-slate-100 text-slate-500 font-semibold px-2 py-0.5 rounded-md">
+                    默认启用
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-semibold italic">由环境变量 GEMINI_API_KEY 提供</span>
               </div>
-              <span className="text-[10px] text-slate-400 font-semibold italic">由 AI Studio 自动注入</span>
-            </div>
+            ) : (
+              <div className="px-4 py-3 bg-amber-50 text-amber-700 text-xs font-medium">
+                未检测到系统默认 Gemini Key。请在部署环境配置 GEMINI_API_KEY，或添加备用 Key 后再使用 AI 课文解析。
+              </div>
+            )}
 
             {/* Custom Keys */}
             {fetchingKeys ? (

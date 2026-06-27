@@ -1,8 +1,8 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
+import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
+import { Firestore, getFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
@@ -22,12 +22,30 @@ const firebaseConfig = {
   databaseId: config.firestoreDatabaseId,
 };
 
-admin.initializeApp({
-  projectId: firebaseConfig.projectId,
-});
+const hasServiceAccount = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT);
+const hasApplicationCredentials = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+let db: Firestore | null = null;
 
-// Create Firestore reference with custom databaseId
-const db = getFirestore(firebaseConfig.databaseId);
+try {
+  if (hasServiceAccount) {
+    initializeApp({
+      credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}")),
+      projectId: firebaseConfig.projectId,
+    });
+    db = firebaseConfig.databaseId ? getFirestore(firebaseConfig.databaseId) : getFirestore();
+  } else if (hasApplicationCredentials) {
+    initializeApp({
+      credential: applicationDefault(),
+      projectId: firebaseConfig.projectId,
+    });
+    db = firebaseConfig.databaseId ? getFirestore(firebaseConfig.databaseId) : getFirestore();
+  } else {
+    console.warn("Firebase Admin credentials not found. Server-side key storage and cache are disabled.");
+  }
+} catch (err) {
+  console.error("Failed to initialize Firebase Admin. Server-side key storage and cache are disabled:", err);
+  db = null;
+}
 
 // Initialize Express App
 const app = express();
@@ -39,12 +57,21 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // 2. Health check route
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", projectId: firebaseConfig.projectId, databaseId: firebaseConfig.databaseId });
+  res.json({
+    status: "ok",
+    projectId: firebaseConfig.projectId,
+    databaseId: firebaseConfig.databaseId,
+    adminFirestoreEnabled: Boolean(db),
+    geminiEnvKeyConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS),
+  });
 });
 
 // 3. API Key Management (Server-side Firestore backend, never exposes actual keys to frontend)
 app.get("/api/keys", async (req, res) => {
   try {
+    if (!db) {
+      return res.json([]);
+    }
     const snapshot = await db.collection("gemini_keys").orderBy("addedAt", "desc").get();
     const keysList = snapshot.docs.map((doc) => {
       const data = doc.data();
@@ -68,6 +95,11 @@ app.get("/api/keys", async (req, res) => {
 
 app.post("/api/keys", async (req, res) => {
   try {
+    if (!db) {
+      return res.status(503).json({
+        error: "服务器尚未配置 Firebase Admin 凭据，无法保存备用密钥。请使用 GEMINI_API_KEY 环境变量，或配置 FIREBASE_SERVICE_ACCOUNT。",
+      });
+    }
     const { key } = req.body;
     if (!key || typeof key !== "string" || !key.startsWith("AIzaSy")) {
       return res.status(400).json({ error: "无效的 Google Gemini API Key。它应该以 'AIzaSy' 开头。" });
@@ -87,6 +119,11 @@ app.post("/api/keys", async (req, res) => {
 
 app.delete("/api/keys/:id", async (req, res) => {
   try {
+    if (!db) {
+      return res.status(503).json({
+        error: "服务器尚未配置 Firebase Admin 凭据，无法删除备用密钥。",
+      });
+    }
     const { id } = req.params;
     await db.collection("gemini_keys").doc(id).delete();
     res.json({ message: "密钥已成功从轮询池移除。" });
@@ -100,22 +137,30 @@ app.delete("/api/keys/:id", async (req, res) => {
 async function getActiveGeminiKeys(): Promise<string[]> {
   const keys: string[] = [];
   
-  // 1. Add standard env key if present
-  if (process.env.GEMINI_API_KEY) {
-    keys.push(process.env.GEMINI_API_KEY);
-  }
+  // 1. Add env key(s) if present. GEMINI_API_KEY (or GEMINI_API_KEYS) may hold
+  // several keys separated by commas/whitespace for round-robin rotation.
+  const envKeys = `${process.env.GEMINI_API_KEY || ""} ${process.env.GEMINI_API_KEYS || ""}`;
+  envKeys
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .forEach((key) => {
+      if (!keys.includes(key)) keys.push(key);
+    });
   
   // 2. Load keys from Firestore
-  try {
-    const snapshot = await db.collection("gemini_keys").get();
-    snapshot.docs.forEach((doc) => {
-      const data = doc.data();
-      if (data.key && typeof data.key === "string" && !keys.includes(data.key)) {
-        keys.push(data.key);
-      }
-    });
-  } catch (err) {
-    console.error("Error loading extra API keys from Firestore:", err);
+  if (db) {
+    try {
+      const snapshot = await db.collection("gemini_keys").get();
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        if (data.key && typeof data.key === "string" && !keys.includes(data.key)) {
+          keys.push(data.key);
+        }
+      });
+    } catch (err) {
+      console.error("Error loading extra API keys from Firestore:", err);
+    }
   }
   
   return keys.filter(Boolean);
@@ -327,7 +372,7 @@ interface GeminiResult {
       const parsedResult = JSON.parse(cleanJson);
       
       // Cache generated inflections in Firestore word_inflections_cache
-      if (parsedResult && parsedResult.vocabulary && Array.isArray(parsedResult.vocabulary)) {
+      if (db && parsedResult && parsedResult.vocabulary && Array.isArray(parsedResult.vocabulary)) {
         for (const item of parsedResult.vocabulary) {
           if (item.word && item.inflections) {
             try {
