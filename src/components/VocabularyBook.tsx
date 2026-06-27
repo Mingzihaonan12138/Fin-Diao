@@ -90,7 +90,9 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
   // Spaced repetition state
   const [reviewMode, setReviewMode] = useState(false);
   const [reviewIndex, setReviewIndex] = useState(0);
+  const [reviewQueue, setReviewQueue] = useState<VocabularyWord[]>([]);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [gradingReview, setGradingReview] = useState(false);
   
   // Mistake practice state
   const [practiceMistakes, setPracticeMistakes] = useState(false);
@@ -109,13 +111,21 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
     if (!w.nextReviewAt) return true;
     return new Date(w.nextReviewAt) <= new Date();
   });
+  const activeReviewQueue = reviewMode ? reviewQueue : pendingReviews;
+  const currentReviewWord = activeReviewQueue[reviewIndex];
 
   // Filter for mistakes
   const mistakesList = vocab.filter(w => w.isMistake);
 
   const handleGradeSM2 = async (quality: number) => {
-    const word = pendingReviews[reviewIndex];
-    if (!word) return;
+    if (gradingReview) return;
+    const word = currentReviewWord;
+    if (!word) {
+      setReviewMode(false);
+      setReviewIndex(0);
+      setReviewQueue([]);
+      return;
+    }
 
     const { repetitions, easeFactor, intervalDays, nextReviewAt } = calculateSM2(
       quality,
@@ -135,21 +145,26 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       isMistake: quality < 3 ? true : word.isMistake // Push to mistake book if quality is poor
     };
 
+    setGradingReview(true);
     try {
       await saveVocabularyWord(updatedWord, user);
-      onRefresh();
+      await Promise.resolve(onRefresh());
       setShowAnswer(false);
       
       // Advance or end review session
-      if (reviewIndex + 1 < pendingReviews.length) {
+      if (reviewIndex + 1 < activeReviewQueue.length) {
         setReviewIndex(reviewIndex + 1);
       } else {
         setReviewMode(false);
         setReviewIndex(0);
+        setReviewQueue([]);
         alert("恭喜！您已完成了本次所有的待复习生词！💡");
       }
     } catch (err) {
       console.error(err);
+      alert("保存复习结果失败，请稍后重试。如果您已登录，请检查网络或重新登录。");
+    } finally {
+      setGradingReview(false);
     }
   };
 
@@ -256,6 +271,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
               <button
                 onClick={() => {
                   setReviewIndex(0);
+                  setReviewQueue([...pendingReviews]);
                   setReviewMode(true);
                   setShowAnswer(false);
                 }}
@@ -285,14 +301,19 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       )}
 
       {/* REVIEW MODE: Spaced Repetition Review UI */}
-      {reviewMode && pendingReviews.length > 0 && (
+      {reviewMode && currentReviewWord && (
         <div className="max-w-2xl mx-auto space-y-6">
           <div className="flex justify-between items-center bg-white border border-slate-100 rounded-xl px-4 py-3 shadow-sm">
             <span className="text-xs font-bold text-slate-400 uppercase">
-              间隔复习中 ({reviewIndex + 1} / {pendingReviews.length})
+              间隔复习中 ({reviewIndex + 1} / {activeReviewQueue.length})
             </span>
             <button
-              onClick={() => setReviewMode(false)}
+              onClick={() => {
+                setReviewMode(false);
+                setReviewIndex(0);
+                setReviewQueue([]);
+                setShowAnswer(false);
+              }}
               className="text-xs font-semibold text-red-500 hover:underline"
             >
               退出复习
@@ -302,16 +323,16 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
           {/* Core Word Flashcard */}
           <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-md text-center space-y-6 relative overflow-hidden">
             <div className="absolute right-4 top-4 text-xs font-mono font-bold bg-slate-50 text-slate-400 px-2 py-1 rounded">
-              难度系数: {pendingReviews[reviewIndex].easeFactor || "2.5"}
+              难度系数: {currentReviewWord.easeFactor || "2.5"}
             </div>
 
             <div className="space-y-3 py-6">
               <span className="text-xs font-bold text-slate-400 tracking-widest uppercase">芬兰语单词</span>
               <h3 className="text-4xl md:text-5xl font-bold font-sans text-slate-800 tracking-wide">
-                {pendingReviews[reviewIndex].word}
+                {currentReviewWord.word}
               </h3>
               <p className="text-xs text-slate-400 font-mono italic">
-                {pendingReviews[reviewIndex].partOfSpeech} • {pendingReviews[reviewIndex].keyInflections}
+                {currentReviewWord.partOfSpeech} • {currentReviewWord.keyInflections}
               </p>
             </div>
 
@@ -329,21 +350,21 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
               <div className="space-y-6 pt-6 border-t border-slate-50 animate-fade-in text-left">
                 <div className="space-y-1.5 bg-slate-50 rounded-xl p-4">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">中文释义</span>
-                  <p className="text-base font-bold text-slate-800">{pendingReviews[reviewIndex].translation}</p>
+                  <p className="text-base font-bold text-slate-800">{currentReviewWord.translation}</p>
                 </div>
 
                 <div className="space-y-2">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">双语例句</span>
                   <div className="border-l-2 border-lake-blue-300 pl-4 space-y-1">
                     <p className="text-lg font-bold text-slate-800 leading-snug">
-                      {pendingReviews[reviewIndex].exampleSentence}
+                      {currentReviewWord.exampleSentence}
                     </p>
-                    <p className="text-xs text-slate-400">{pendingReviews[reviewIndex].translationExample}</p>
+                    <p className="text-xs text-slate-400">{currentReviewWord.translationExample}</p>
                   </div>
                 </div>
 
                 <div className="space-y-1.5 text-xs text-slate-400">
-                  <p>来源课程：<b>{pendingReviews[reviewIndex].sourceCourseTitle}</b></p>
+                  <p>来源课程：<b>{currentReviewWord.sourceCourseTitle}</b></p>
                 </div>
 
                 {/* SM-2 grading buttons */}
@@ -361,7 +382,8 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
                       <button
                         key={g.val}
                         onClick={() => handleGradeSM2(g.val)}
-                        className={`py-3 px-2 rounded-xl font-bold cursor-pointer transition-[scale,box-shadow] hover:shadow active:scale-[0.96] text-center ${g.bg}`}
+                        disabled={gradingReview}
+                        className={`py-3 px-2 rounded-xl font-bold transition-[scale,box-shadow] hover:shadow active:scale-[0.96] text-center disabled:opacity-60 disabled:cursor-wait ${g.bg}`}
                       >
                         <span className="block text-base font-bold">{g.label}</span>
                         <span className="block text-[10px] opacity-90 font-medium">{g.sub}</span>
