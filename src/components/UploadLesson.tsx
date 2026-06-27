@@ -35,6 +35,12 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
   const [loadingStage, setLoadingStage] = useState("");
   const [error, setError] = useState("");
 
+  // JSON import (Claude + Omorfi pipeline → 直接导入，不经 Gemini)
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importMsg, setImportMsg] = useState("");
+  const [importing, setImporting] = useState(false);
+
   const [parsedResult, setParsedResult] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<"points" | "grammar" | "vocab" | "exercise">("points");
   
@@ -105,6 +111,82 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
     const file = e.dataTransfer.files?.[0];
     if (file) {
       processFile(file);
+    }
+  };
+
+  // Import lesson JSON produced by the Claude + Omorfi pipeline.
+  // Accepts a single lesson object, an array of lessons, or { lessons: [...] }.
+  const handleImportJson = async () => {
+    setImportMsg("");
+    let raw: any;
+    try {
+      raw = JSON.parse(importText);
+    } catch (e) {
+      setImportMsg("❌ JSON 格式有误，请检查是否完整粘贴。");
+      return;
+    }
+    const list: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.lessons) ? raw.lessons : [raw];
+    setImporting(true);
+    let courseCount = 0;
+    let vocabCount = 0;
+    try {
+      for (const L of list) {
+        const courseId = `course_${L.topic || "lesson"}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const course: CourseNote = {
+          id: courseId,
+          userId: user ? user.uid : "guest",
+          date: L.date || new Date().toISOString().split("T")[0],
+          title: L.title || "导入课程",
+          keyPoints: L.keyPoints || [],
+          grammarPoints: L.grammarPoints || [],
+          vocabulary: L.vocabulary || [],
+          exercises: {
+            fillBlanks: L.fillBlanks || L.exercises?.fillBlanks || [],
+            // 只保留动词变位表（pronouns 含 minä）；名词变格信息已在生词卡的 inflections 里
+            conjugations: (L.conjugations || L.exercises?.conjugations || []).filter(
+              (c: any) => c && c.pronouns && c.pronouns["minä"]
+            ),
+            translations: L.translations || L.exercises?.translations || [],
+          },
+          createdAt: new Date().toISOString(),
+        };
+        await saveCourseNote(course, user);
+        courseCount++;
+
+        for (const w of L.vocabulary || []) {
+          if (!w || !w.word) continue;
+          const vocabWord: VocabularyWord = {
+            id: `word_${String(w.word).trim().toLowerCase()}`, // 按原型确定 id，重复导入不会重复堆积
+            word: w.word,
+            partOfSpeech: w.partOfSpeech || "",
+            translation: w.translation || "",
+            exampleSentence: w.exampleSentence || "",
+            translationExample: w.translationExample || "",
+            keyInflections: w.keyInflections || "",
+            sourceCourseId: courseId,
+            sourceCourseTitle: course.title,
+            addedAt: new Date().toISOString(),
+            intervalDays: 0,
+            easeFactor: 2.5,
+            repetitions: 0,
+            nextReviewAt: new Date().toISOString(),
+            incorrectCount: 0,
+            correctCount: 0,
+            inflections: w.inflections,
+          };
+          await saveVocabularyWord(vocabWord, user);
+          vocabCount++;
+        }
+      }
+      setImportMsg(`✅ 成功导入 ${courseCount} 节课、${vocabCount} 个生词。可到「我的课本」「生词错词」查看。`);
+      setImportText("");
+      onNoteSaved();
+      onVocabAdded();
+    } catch (err: any) {
+      console.error(err);
+      setImportMsg("❌ 导入时出错：" + (err?.message || "未知错误"));
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -435,6 +517,52 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
                 </>
               )}
             </button>
+          </div>
+          {/* JSON 导入（Claude + Omorfi 词形流水线，词形权威，不经 Gemini） */}
+          <div className="pt-5 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowImport((v) => !v)}
+              className="text-xs font-semibold text-lake-blue-600 hover:text-lake-blue-700 cursor-pointer flex items-center gap-1"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {showImport ? "收起" : "粘贴课程 JSON 导入（高质量词库 / Omorfi 词形）"}
+            </button>
+
+            {showImport && (
+              <div className="mt-3 space-y-3 animate-fade-in">
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  把整理好的课程 JSON（单节课对象、数组，或 {"{ lessons: [...] }"}）粘贴到下面导入。词形为 Omorfi 权威生成，填空答案已校验。
+                </p>
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  placeholder='例如：{"title":"复数部分格 ...","vocabulary":[...],"fillBlanks":[...]}'
+                  className="w-full min-h-[140px] p-4 text-xs font-mono rounded-2xl border border-slate-200 focus:border-lake-blue-500 focus:outline-none transition-colors resize-y"
+                />
+                {importMsg && (
+                  <div
+                    className={`text-xs font-semibold p-3 rounded-xl border ${
+                      importMsg.startsWith("✅")
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                        : "bg-red-50 text-red-600 border-red-100"
+                    }`}
+                  >
+                    {importMsg}
+                  </div>
+                )}
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleImportJson}
+                    disabled={importing || !importText.trim()}
+                    className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-100 text-white font-semibold text-xs rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                  >
+                    {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {importing ? "导入中..." : "导入课程 JSON"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       )}
