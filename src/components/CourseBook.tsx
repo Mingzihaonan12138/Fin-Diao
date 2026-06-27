@@ -332,7 +332,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                     <h4 className="text-base font-bold text-slate-800">{pt.title}</h4>
                   </div>
 
-                  <div className="bg-slate-50 rounded-xl p-4 text-xs font-medium text-slate-600 leading-relaxed">
+                  <div className="bg-slate-50 rounded-xl p-5 text-[15px] font-medium text-slate-700 leading-7 whitespace-pre-line text-pretty">
                     {pt.rule}
                   </div>
 

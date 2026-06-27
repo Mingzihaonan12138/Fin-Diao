@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { VocabularyWord } from "../types";
 import { calculateSM2, saveVocabularyWord, deleteVocabularyWord } from "../lib/sync";
 import { 
@@ -23,8 +23,69 @@ interface VocabularyBookProps {
   onRefresh: () => void;
 }
 
+// 完整变格/变位展开面板
+const fmtForm = (v?: string | string[]) => (Array.isArray(v) ? v.filter(Boolean).join(" / ") : v) || "—";
+function FormCell({ label, value }: { label: string; value?: string | string[] }) {
+  return (
+    <div className="bg-white rounded-lg border border-slate-100 px-3 py-2">
+      <div className="text-[10px] text-slate-400 font-bold">{label}</div>
+      <div className="text-sm font-semibold text-slate-800 font-sans">{fmtForm(value)}</div>
+    </div>
+  );
+}
+function ParadigmPanel({ w }: { w: VocabularyWord }) {
+  const inf = w.inflections;
+  if (!inf) {
+    return <p className="text-xs text-slate-400">这个词不变格（代词 / 副词等），直接记原形即可。</p>;
+  }
+  if (inf.conjugations) {
+    const c = inf.conjugations;
+    const t3 = inf.thirdInfinitive;
+    return (
+      <div className="space-y-3">
+        <div className="text-xs font-bold text-lake-blue-700">动词 · 第 {inf.verbType ?? "?"} 类 · 现在时变位</div>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          <FormCell label="minä" value={c.minä} />
+          <FormCell label="sinä" value={c.sinä} />
+          <FormCell label="hän" value={c.hän} />
+          <FormCell label="me" value={c.me} />
+          <FormCell label="te" value={c.te} />
+          <FormCell label="he" value={c.he} />
+        </div>
+        {(inf.firstInfinitive || t3) && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {inf.firstInfinitive && <FormCell label="第一不定式" value={inf.firstInfinitive} />}
+            {t3?.illative && <FormCell label="第三不定式 -maan（去做）" value={t3.illative} />}
+            {t3?.inessive && <FormCell label="-massa（正在做）" value={t3.inessive} />}
+            {t3?.elative && <FormCell label="-masta（做完回来）" value={t3.elative} />}
+            {t3?.adessive && <FormCell label="-malla（通过做）" value={t3.adessive} />}
+            {t3?.abessive && <FormCell label="-matta（没做）" value={t3.abessive} />}
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (inf.nounInflections) {
+    const n = inf.nounInflections;
+    return (
+      <div className="space-y-2">
+        <div className="text-xs font-bold text-lake-blue-700">名词 / 形容词 · 格变化</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          <FormCell label="单数属格" value={n.singularGenitive} />
+          <FormCell label="单数部分格" value={n.singularPartitive} />
+          <FormCell label="复数主格" value={n.pluralNominative} />
+          <FormCell label="复数属格" value={n.pluralGenitive} />
+          <FormCell label="复数部分格" value={n.pluralPartitive} />
+        </div>
+      </div>
+    );
+  }
+  return <p className="text-xs text-slate-400">暂无变格信息。</p>;
+}
+
 export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBookProps) {
   const [subTab, setSubTab] = useState<"book" | "mistakes">("book");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   
   // Spaced repetition state
   const [reviewMode, setReviewMode] = useState(false);
@@ -448,11 +509,23 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {vocab.filter(w => !w.isMistake).map((w) => (
-                    <tr key={w.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 px-4 space-y-1">
-                        <span className="text-base font-bold text-slate-800">{w.word}</span>
-                        <p className="text-[10px] font-semibold font-mono text-slate-400">{w.keyInflections}</p>
+                  {vocab.filter(w => !w.isMistake).map((w) => {
+                    const open = expandedId === w.id;
+                    return (
+                    <Fragment key={w.id}>
+                    <tr className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-4 px-4">
+                        <button
+                          onClick={() => setExpandedId(open ? null : w.id)}
+                          className="flex items-start gap-1.5 text-left cursor-pointer group"
+                          title="展开完整变格/变位"
+                        >
+                          <ChevronRight className={`w-4 h-4 mt-0.5 shrink-0 transition-transform ${open ? "rotate-90 text-lake-blue-500" : "text-slate-300"}`} />
+                          <span>
+                            <span className="block text-base font-bold text-slate-800 group-hover:text-lake-blue-600 transition-colors">{w.word}</span>
+                            <span className="block text-[10px] font-semibold font-mono text-slate-400">{w.keyInflections}</span>
+                          </span>
+                        </button>
                       </td>
                       <td className="py-4 px-4 text-xs font-semibold text-slate-500">{w.partOfSpeech}</td>
                       <td className="py-4 px-4 text-sm font-medium text-slate-700">{w.translation}</td>
@@ -483,7 +556,16 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    {open && (
+                      <tr className="bg-slate-50/40">
+                        <td colSpan={6} className="px-6 pb-5 pt-1">
+                          <ParadigmPanel w={w} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
