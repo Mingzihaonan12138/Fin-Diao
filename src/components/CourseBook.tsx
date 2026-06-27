@@ -42,6 +42,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
   
   const [activeBlankId, setActiveBlankId] = useState<string | null>(null);
   const [activeConjKey, setActiveConjKey] = useState<{ id: string; field: string } | null>(null);
+  const [revealAnswers, setRevealAnswers] = useState(false); // 学习模式：直接看答案
   
   const [savedVocabIds, setSavedVocabIds] = useState<string[]>([]);
   const [keyPointsExpanded, setKeyPointsExpanded] = useState(false);
@@ -218,6 +219,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
     setTranslationChecked({});
     setTranslationChecks({});
     setSavedVocabIds([]);
+    setRevealAnswers(false);
   };
 
   if (selectedCourse) {
@@ -423,7 +425,19 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
           {/* 4. Exercises */}
           {activeTab === "exercise" && (
             <div className="space-y-6">
-              
+
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setRevealAnswers(v => !v)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold border transition-[scale,background-color] active:scale-[0.96] cursor-pointer"
+                  style={revealAnswers
+                    ? { background: "#6189A6", color: "#fff", borderColor: "#6189A6" }
+                    : { background: "#fff", color: "#4A7291", borderColor: "#D4E2EC" }}
+                >
+                  {revealAnswers ? "隐藏答案（自测模式）" : "显示答案（学习模式）"}
+                </button>
+              </div>
+
               {(activeBlankId || activeConjKey) && (
                 <div className="bg-slate-100 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-4 sticky top-4 z-40 animate-fade-in shadow-sm">
                   <span className="text-xs font-bold text-slate-500 inline-flex items-center gap-1 shrink-0">
@@ -498,6 +512,14 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                               <p className="mt-1 text-slate-500 font-medium font-sans">解释提示：{q.hint}</p>
                             </div>
                           )}
+
+                          {revealAnswers && !exerciseSubmitted && (
+                            <div className="ml-6 p-2.5 rounded-lg text-xs bg-lake-blue-50 text-lake-blue-700">
+                              <span className="font-bold">答案：</span>
+                              <b className="font-mono text-sm">{Array.isArray(q.answer) ? q.answer.join(" / ") : q.answer}</b>
+                              <span className="text-slate-500 ml-2">{q.hint}</span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -559,8 +581,8 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                                       : "border-slate-200"
                                 }`}
                               />
-                              {exerciseSubmitted && !isCorrect && (
-                                <p className="text-[10px] text-red-500 font-bold text-center mt-0.5">
+                              {((exerciseSubmitted && !isCorrect) || (revealAnswers && !exerciseSubmitted)) && (
+                                <p className={`text-[10px] font-bold text-center mt-0.5 ${exerciseSubmitted ? "text-red-500" : "text-lake-blue-600"}`}>
                                   答案: {Array.isArray(correctVal) ? correctVal.join(" / ") : correctVal}
                                 </p>
                               )}

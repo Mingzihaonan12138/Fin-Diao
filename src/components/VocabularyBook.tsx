@@ -348,26 +348,23 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
 
                 {/* SM-2 grading buttons */}
                 <div className="space-y-3 pt-4 border-t border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block text-center">
-                    请诚实评估您的记忆品质（0-5 级分，系统将自适应调整下次安排）：
+                  <span className="text-xs font-bold text-slate-500 block text-center">
+                    这个词记住了吗？
                   </span>
 
-                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                  <div className="grid grid-cols-3 gap-3">
                     {[
-                      { val: 5, label: "完美回忆", bg: "bg-emerald-500 hover:bg-emerald-600 text-white" },
-                      { val: 4, label: "有迟疑", bg: "bg-teal-500 hover:bg-teal-600 text-white" },
-                      { val: 3, label: "勉强想起", bg: "bg-sky-500 hover:bg-sky-600 text-white" },
-                      { val: 2, label: "记错了", bg: "bg-amber-500 hover:bg-amber-600 text-white" },
-                      { val: 1, label: "需提示", bg: "bg-orange-500 hover:bg-orange-600 text-white" },
-                      { val: 0, label: "完全陌生", bg: "bg-red-500 hover:bg-red-600 text-white" },
+                      { val: 5, label: "记住", sub: "轻松想起", bg: "bg-emerald-500 hover:bg-emerald-600 text-white" },
+                      { val: 3, label: "模糊", sub: "费劲想起", bg: "bg-amber-500 hover:bg-amber-600 text-white" },
+                      { val: 0, label: "不记得", sub: "完全忘了", bg: "bg-red-500 hover:bg-red-600 text-white" },
                     ].map((g) => (
                       <button
                         key={g.val}
                         onClick={() => handleGradeSM2(g.val)}
-                        className={`py-2 px-1 rounded-xl text-[11px] font-bold cursor-pointer transition-all hover:shadow text-center ${g.bg}`}
+                        className={`py-3 px-2 rounded-xl font-bold cursor-pointer transition-[scale,box-shadow] hover:shadow active:scale-[0.96] text-center ${g.bg}`}
                       >
-                        <span className="block text-sm font-bold font-mono">{g.val}</span>
-                        {g.label}
+                        <span className="block text-base font-bold">{g.label}</span>
+                        <span className="block text-[10px] opacity-90 font-medium">{g.sub}</span>
                       </button>
                     ))}
                   </div>
