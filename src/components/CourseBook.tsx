@@ -743,7 +743,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
               nextReviewAt: new Date().toISOString(),
               incorrectCount: 0,
               correctCount: 0,
-              inflections: w.inflections,
+              inflections: w.inflections ?? null, // 不变格的词(代词/副词)无 inflections，存 null 而非 undefined（Firestore 不接受 undefined）
             };
             await saveVocabularyWord(vw, user);
             vc++;
@@ -993,7 +993,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
               keyInflections: constructKeyInflections(word),
               sourceCourseId: courseId,
               sourceCourseTitle: lessonTitle,
-              inflections: buildWordInflections(word),
+              inflections: buildWordInflections(word) ?? null,
             };
           } else {
             const wordId = `word_${String(lemma).trim().toLowerCase()}`; // 按原型确定编号，与课程导入一致，避免重复
@@ -1014,7 +1014,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
               nextReviewAt: new Date().toISOString(),
               incorrectCount: 0,
               correctCount: 0,
-              inflections: buildWordInflections(word),
+              inflections: buildWordInflections(word) ?? null,
             };
           }
           await saveVocabularyWord(vocabWord, user);
