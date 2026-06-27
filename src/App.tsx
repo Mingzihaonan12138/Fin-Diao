@@ -17,6 +17,7 @@ import VocabularyBook from "./components/VocabularyBook";
 import GrammarPractice from "./components/GrammarPractice";
 import DailySentence from "./components/DailySentence";
 import Settings from "./components/Settings";
+import StickyNotes from "./components/StickyNotes";
 import Auth from "./components/Auth";
 
 // Icons
@@ -26,6 +27,7 @@ import {
   BookMarked,
   GraduationCap,
   Settings2,
+  StickyNote,
   Loader2,
   Lock,
 } from "lucide-react";
@@ -165,6 +167,7 @@ export default function App() {
               { id: "coursebook", label: "我的课本", icon: BookOpen },
               { id: "vocab", label: "生词错词", icon: BookMarked },
               { id: "practice", label: "专项强化", icon: GraduationCap },
+              { id: "notes", label: "心得便签", icon: StickyNote },
               { id: "settings", label: "系统设置", icon: Settings2 },
             ].map((t) => {
               const IconComp = t.icon;
@@ -322,8 +325,17 @@ export default function App() {
             </div>
           )}
 
+          {activeTab === "notes" && (
+            <StickyNotes
+              user={user}
+              targetType="board"
+              heading="心得便签墙"
+              hint="贴上你自己的总结、易混点、灵感——和课本里的笔记并行。点便签右下角圆点换颜色。"
+            />
+          )}
+
           {activeTab === "settings" && (
-            <Settings 
+            <Settings
               user={user}
               loading={authLoading}
               onEnterGuestMode={() => setIsGuest(true)}
@@ -335,12 +347,13 @@ export default function App() {
 
       {/* 3. Mobile Navigation Bottom Rail (only visible on small viewports) */}
       <footer className="lg:hidden bg-[#F3EFE4] border-t border-[#D9D1C0] sticky bottom-0 z-50 shadow-lg">
-        <div className="grid grid-cols-5 h-16">
+        <div className="grid grid-cols-6 h-16">
           {[
             { id: "home", label: "首页", icon: Compass },
             { id: "coursebook", label: "课本", icon: BookOpen },
             { id: "vocab", label: "生词", icon: BookMarked },
             { id: "practice", label: "训练", icon: GraduationCap },
+            { id: "notes", label: "便签", icon: StickyNote },
             { id: "settings", label: "设置", icon: Settings2 },
           ].map((t) => {
             const IconComp = t.icon;

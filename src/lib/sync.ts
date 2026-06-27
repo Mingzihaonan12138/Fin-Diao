@@ -9,7 +9,7 @@ import {
   updateDoc
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { CourseNote, VocabularyWord, ExerciseRecord, UserStats } from "../types";
+import { CourseNote, VocabularyWord, ExerciseRecord, UserStats, StickyNote } from "../types";
 
 // SM-2 Spaced Repetition Algorithm
 // quality: 0 to 5
@@ -204,6 +204,40 @@ export async function loadDailySentences(user: any, dateStr: string): Promise<an
   } else {
     const list = getLocal<any>("fi_daily_sentences");
     return list.filter(s => s.date === dateStr);
+  }
+}
+
+// 11. STICKY NOTES (心得便签) — pinned to the board, a course, or a word
+const LOCAL_STICKY = "fi_sticky_notes";
+
+export async function loadStickyNotes(user: any): Promise<StickyNote[]> {
+  if (user) {
+    const q = query(collection(db, "sticky_notes"), where("userId", "==", user.uid));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data() as StickyNote);
+  } else {
+    return getLocal<StickyNote>(LOCAL_STICKY);
+  }
+}
+
+export async function saveStickyNote(note: StickyNote, user: any): Promise<void> {
+  if (user) {
+    await setDoc(doc(db, "sticky_notes", note.id), { ...note, userId: user.uid });
+  } else {
+    const list = getLocal<StickyNote>(LOCAL_STICKY);
+    const i = list.findIndex(n => n.id === note.id);
+    if (i > -1) list[i] = note; else list.push(note);
+    setLocal(LOCAL_STICKY, list);
+  }
+}
+
+export async function deleteStickyNote(id: string, user: any): Promise<void> {
+  if (user) {
+    await deleteDoc(doc(db, "sticky_notes", id));
+  } else {
+    let list = getLocal<StickyNote>(LOCAL_STICKY);
+    list = list.filter(n => n.id !== id);
+    setLocal(LOCAL_STICKY, list);
   }
 }
 

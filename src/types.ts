@@ -126,6 +126,19 @@ export interface CourseNote {
   createdAt: string;
 }
 
+export interface StickyNote {
+  id: string;
+  userId?: string;
+  text: string;
+  colorIndex: number;     // index into the sticky palette
+  rotation: number;       // small random tilt in degrees
+  targetType: "board" | "course" | "word"; // where it is pinned
+  targetId?: string;      // course id / word lemma when pinned to one
+  targetLabel?: string;   // human label of the target (for the board view)
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ExerciseRecord {
   id: string;
   userId: string;

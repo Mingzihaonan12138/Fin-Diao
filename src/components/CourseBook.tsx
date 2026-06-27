@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { CourseNote, VocabularyWord, FillBlankQuestion, ConjugationTable, TranslationQuestion } from "../types";
 import { deleteCourseNote, saveVocabularyWord, saveExerciseRecord, saveCourseNote, loadVocabularyWords } from "../lib/sync";
+import StickyNotes from "./StickyNotes";
 import {
   BookOpen,
   Trash2,
@@ -302,6 +303,17 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                     </ul>
                   </div>
                 )}
+              </div>
+
+              <div className="pt-2">
+                <StickyNotes
+                  user={user}
+                  targetType="course"
+                  targetId={selectedCourse.id}
+                  targetLabel={selectedCourse.title}
+                  heading="我的心得便签"
+                  hint="对这节课的总结、易混点或提醒——只贴在这节课上。"
+                />
               </div>
             </div>
           )}
