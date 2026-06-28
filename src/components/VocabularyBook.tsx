@@ -1,6 +1,6 @@
 import { useState, Fragment } from "react";
 import { VocabularyWord } from "../types";
-import { calculateSM2, saveVocabularyWord, deleteVocabularyWord } from "../lib/sync";
+import { calculateSM2, saveVocabularyReviewProgress, deleteVocabularyWord } from "../lib/sync";
 import { 
   BookMarked, 
   Trash2, 
@@ -134,8 +134,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       word.intervalDays || 0
     );
 
-    const updatedWord: VocabularyWord = {
-      ...word,
+    const reviewPatch = {
       repetitions,
       easeFactor,
       intervalDays,
@@ -147,7 +146,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
 
     setGradingReview(true);
     try {
-      await saveVocabularyWord(updatedWord, user);
+      await saveVocabularyReviewProgress(word, user, reviewPatch);
       await Promise.resolve(onRefresh());
       setShowAnswer(false);
       
@@ -193,14 +192,16 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
     if (!current) return;
 
     // Mark mistake as resolved, but keep in standard vocabulary book
-    const updated: VocabularyWord = {
-      ...current,
-      isMistake: false,
-      nextReviewAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // schedule 1 day out
-    };
-
     try {
-      await saveVocabularyWord(updated, user);
+      await saveVocabularyReviewProgress(current, user, {
+        repetitions: current.repetitions || 0,
+        easeFactor: current.easeFactor || 2.5,
+        intervalDays: current.intervalDays || 0,
+        nextReviewAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // schedule 1 day out
+        correctCount: current.correctCount || 0,
+        incorrectCount: current.incorrectCount || 0,
+        isMistake: false,
+      });
       onRefresh();
       
       // Advance or close

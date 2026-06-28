@@ -134,6 +134,37 @@ export async function saveVocabularyWord(word: VocabularyWord, user: any): Promi
   }
 }
 
+export async function saveVocabularyReviewProgress(
+  word: VocabularyWord,
+  user: any,
+  reviewPatch: Pick<
+    VocabularyWord,
+    "repetitions" | "easeFactor" | "intervalDays" | "nextReviewAt" | "correctCount" | "incorrectCount"
+  > & { isMistake?: boolean }
+): Promise<void> {
+  const updatedWord: VocabularyWord = { ...word, ...reviewPatch };
+
+  if (user) {
+    if (!word.id) {
+      throw new Error("无法保存复习结果：这个单词缺少云端文档 ID。");
+    }
+
+    await updateDoc(doc(db, "vocabulary", word.id), {
+      ...reviewPatch,
+      userId: user.uid,
+    });
+  } else {
+    const list = getLocal<VocabularyWord>(LOCAL_VOCAB);
+    const existingIndex = list.findIndex(w => w.id === word.id);
+    if (existingIndex > -1) {
+      list[existingIndex] = updatedWord;
+    } else {
+      list.push(updatedWord);
+    }
+    setLocal(LOCAL_VOCAB, list);
+  }
+}
+
 // 5. LOAD VOCABULARY WORDS
 export async function loadVocabularyWords(user: any): Promise<VocabularyWord[]> {
   if (user) {

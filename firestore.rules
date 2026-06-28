@@ -62,9 +62,9 @@ service cloud.firestore {
     match /vocabulary/{vocabId} {
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && isValidId(vocabId) && isValidVocabulary(request.resource.data);
-      allow update: if isSignedIn() && isValidId(vocabId) && resource.data.userId == request.auth.uid && isValidVocabulary(request.resource.data);
-      allow delete: if isSignedIn() && isValidId(vocabId) && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidVocabulary(request.resource.data);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidVocabulary(request.resource.data);
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
     // Collection: Exercise Records
