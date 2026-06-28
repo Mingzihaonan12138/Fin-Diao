@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { CourseNote, VocabularyWord, FillBlankQuestion, ConjugationTable, TranslationQuestion } from "../types";
-import { saveCourseNote, saveVocabularyWord, saveExerciseRecord } from "../lib/sync";
+import { loadCourseNotes, saveCourseNote, saveVocabularyWord, saveExerciseRecord } from "../lib/sync";
 import { 
   Upload, 
   FileText, 
@@ -54,6 +54,30 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
 
   // Helper characters for Finnish
   const finnishChars = ["ä", "ö", "å", "Ä", "Ö", "Å"];
+
+  const getSupplementCourseId = () => `course_ai_supplement_${user?.uid || "guest"}`;
+
+  const isSupplementaryLookup = (result: any) => {
+    if (!result || fileBase64) return false;
+    const vocabularyCount = result.vocabulary?.length || 0;
+    const grammarCount = result.grammarPoints?.length || 0;
+    const exerciseCount =
+      (result.exercises?.fillBlanks?.length || 0) +
+      (result.exercises?.conjugations?.length || 0) +
+      (result.exercises?.translations?.length || 0);
+
+    return vocabularyCount > 0 && vocabularyCount <= 8 && grammarCount <= 2 && exerciseCount <= 6;
+  };
+
+  const uniqueByText = <T,>(items: T[], getKey: (item: T) => string) => {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      const key = getKey(item).trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
 
   // Helper function to check if user's answer matches the correct answer (supports string or array of strings)
   const isAnswerCorrect = (userVal: string, correctVal: string | string[]): boolean => {
@@ -167,18 +191,54 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
   const handleSaveNote = async () => {
     if (!parsedResult) return;
     try {
-      const courseId = parsedResult.id || `course_${Date.now()}`;
-      
+      const saveAsSupplement = isSupplementaryLookup(parsedResult);
+      const courseId = saveAsSupplement ? getSupplementCourseId() : parsedResult.id || `course_${Date.now()}`;
+      const existingSupplement = saveAsSupplement
+        ? (await loadCourseNotes(user)).find((course) => course.id === courseId)
+        : undefined;
+
+      const mergedKeyPoints = existingSupplement
+        ? uniqueByText([...(existingSupplement.keyPoints || []), ...(parsedResult.keyPoints || [])], String)
+        : parsedResult.keyPoints || [];
+      const mergedGrammarPoints = existingSupplement
+        ? uniqueByText(
+            [...(existingSupplement.grammarPoints || []), ...(parsedResult.grammarPoints || [])],
+            (point) => `${point.title || ""}-${point.rule || ""}`
+          )
+        : parsedResult.grammarPoints || [];
+      const mergedVocabulary = existingSupplement
+        ? uniqueByText(
+            [...(existingSupplement.vocabulary || []), ...(parsedResult.vocabulary || [])],
+            (word) => word.word || ""
+          )
+        : parsedResult.vocabulary || [];
+      const mergedExercises = existingSupplement
+        ? {
+            fillBlanks: uniqueByText(
+              [...(existingSupplement.exercises?.fillBlanks || []), ...(parsedResult.exercises?.fillBlanks || [])],
+              (question) => question.sentence || question.id || ""
+            ),
+            conjugations: uniqueByText(
+              [...(existingSupplement.exercises?.conjugations || []), ...(parsedResult.exercises?.conjugations || [])],
+              (table) => table.verb || table.id || ""
+            ),
+            translations: uniqueByText(
+              [...(existingSupplement.exercises?.translations || []), ...(parsedResult.exercises?.translations || [])],
+              (question) => question.chinese || question.finnish || question.id || ""
+            ),
+          }
+        : parsedResult.exercises || { fillBlanks: [], conjugations: [], translations: [] };
+
       const fullNote: CourseNote = {
         id: courseId,
         userId: user ? user.uid : "guest",
         date: customDate,
-        title: customTitle,
-        keyPoints: parsedResult.keyPoints || [],
-        grammarPoints: parsedResult.grammarPoints || [],
-        vocabulary: parsedResult.vocabulary || [],
-        exercises: parsedResult.exercises || { fillBlanks: [], conjugations: [], translations: [] },
-        createdAt: new Date().toISOString(),
+        title: saveAsSupplement ? "零碎知识点 · AI 查词补充" : customTitle,
+        keyPoints: mergedKeyPoints,
+        grammarPoints: mergedGrammarPoints,
+        vocabulary: mergedVocabulary,
+        exercises: mergedExercises,
+        createdAt: existingSupplement?.createdAt || new Date().toISOString(),
       };
 
       await saveCourseNote(fullNote, user);
@@ -202,8 +262,8 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
         exampleSentence: word.exampleSentence,
         translationExample: word.translationExample,
         keyInflections: word.keyInflections,
-        sourceCourseId: parsedResult.id || "upload_note",
-        sourceCourseTitle: customTitle,
+        sourceCourseId: isSupplementaryLookup(parsedResult) ? getSupplementCourseId() : parsedResult.id || "upload_note",
+        sourceCourseTitle: isSupplementaryLookup(parsedResult) ? "零碎知识点 · AI 查词补充" : customTitle,
         addedAt: new Date().toISOString(),
         intervalDays: 0,
         easeFactor: 2.5,
@@ -464,6 +524,12 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
           {/* Note Info Headers & Save button */}
           <section className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="space-y-2 flex-1 w-full">
+              {isSupplementaryLookup(parsedResult) && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-[11px] font-bold border border-amber-100">
+                  <BookMarked className="w-3.5 h-3.5" />
+                  将汇总到固定卡片：零碎知识点 · AI 查词补充
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-slate-400" />
                 <input
@@ -500,7 +566,11 @@ export default function UploadLesson({ user, onNoteSaved, onVocabAdded }: Upload
                 }`}
               >
                 {isSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                {isSaved ? "已保存到课本" : "保存到课程笔记"}
+                {isSaved
+                  ? "已保存到课本"
+                  : isSupplementaryLookup(parsedResult)
+                    ? "汇总到零碎知识点"
+                    : "保存到课程笔记"}
               </button>
             </div>
           </section>
