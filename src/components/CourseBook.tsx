@@ -47,6 +47,10 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
   const [savedVocabIds, setSavedVocabIds] = useState<string[]>([]);
   const [keyPointsExpanded, setKeyPointsExpanded] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [lessonVocabPracticeMode, setLessonVocabPracticeMode] = useState(false);
+  const [lessonVocabPracticeIndex, setLessonVocabPracticeIndex] = useState(0);
+  const [lessonVocabShowAnswer, setLessonVocabShowAnswer] = useState(false);
+  const [lessonVocabStats, setLessonVocabStats] = useState({ remembered: 0, fuzzy: 0, forgotten: 0 });
 
   // JSON Import States
   const [showImportPanel, setShowImportPanel] = useState(false);
@@ -209,6 +213,34 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
     }
   };
 
+  const startLessonVocabPractice = () => {
+    setLessonVocabPracticeMode(true);
+    setLessonVocabPracticeIndex(0);
+    setLessonVocabShowAnswer(false);
+    setLessonVocabStats({ remembered: 0, fuzzy: 0, forgotten: 0 });
+  };
+
+  const exitLessonVocabPractice = () => {
+    setLessonVocabPracticeMode(false);
+    setLessonVocabPracticeIndex(0);
+    setLessonVocabShowAnswer(false);
+  };
+
+  const handleLessonVocabGrade = (grade: "remembered" | "fuzzy" | "forgotten") => {
+    if (!selectedCourse) return;
+    const words = selectedCourse.vocabulary || [];
+    setLessonVocabStats(prev => ({ ...prev, [grade]: prev[grade] + 1 }));
+    setLessonVocabShowAnswer(false);
+
+    if (lessonVocabPracticeIndex + 1 < words.length) {
+      setLessonVocabPracticeIndex(prev => prev + 1);
+    } else {
+      setLessonVocabPracticeMode(false);
+      setLessonVocabPracticeIndex(0);
+      alert("本课随堂单词练习完成！");
+    }
+  };
+
   // Reset state on course selection or exit
   const handleSelectCourse = (course: CourseNote) => {
     setSelectedCourse(course);
@@ -220,9 +252,13 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
     setTranslationChecks({});
     setSavedVocabIds([]);
     setRevealAnswers(false);
+    exitLessonVocabPractice();
   };
 
   if (selectedCourse) {
+    const lessonVocabWords = selectedCourse.vocabulary || [];
+    const currentLessonVocabWord = lessonVocabWords[lessonVocabPracticeIndex];
+
     return (
       <div className="space-y-6 animate-fade-in">
         
@@ -359,19 +395,98 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
           {/* 3. Vocabulary */}
           {activeTab === "vocab" && (
             <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm space-y-6">
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
                 <h4 className="text-base font-semibold text-slate-800">
                   词汇列表 ({selectedCourse.vocabulary?.length || 0} 个单词)
                 </h4>
-                <button
-                  onClick={handleAddAllToVocab}
-                  className="px-4 py-2 bg-lake-blue-50 text-lake-blue-600 hover:bg-lake-blue-100 text-xs font-semibold rounded-xl cursor-pointer transition-all inline-flex items-center gap-1"
-                >
-                  <BookMarked className="w-3.5 h-3.5" />
-                  一键加入我的生词本
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={lessonVocabPracticeMode ? exitLessonVocabPractice : startLessonVocabPractice}
+                    disabled={lessonVocabWords.length === 0}
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-xl cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                    {lessonVocabPracticeMode ? "退出本课练习" : "练习本课单词"}
+                  </button>
+                  <button
+                    onClick={handleAddAllToVocab}
+                    className="px-4 py-2 bg-lake-blue-50 text-lake-blue-600 hover:bg-lake-blue-100 text-xs font-semibold rounded-xl cursor-pointer transition-all inline-flex items-center gap-1"
+                  >
+                    <BookMarked className="w-3.5 h-3.5" />
+                    一键加入我的生词本
+                  </button>
+                </div>
               </div>
 
+              {lessonVocabPracticeMode && currentLessonVocabWord ? (
+                <div className="max-w-xl mx-auto space-y-5">
+                  <div className="flex justify-between items-center bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+                    <span className="text-xs font-bold text-slate-500">
+                      本课单词练习 ({lessonVocabPracticeIndex + 1} / {lessonVocabWords.length})
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-400">
+                      记住 {lessonVocabStats.remembered} · 模糊 {lessonVocabStats.fuzzy} · 不记得 {lessonVocabStats.forgotten}
+                    </span>
+                  </div>
+
+                  <div className="bg-white border border-slate-100 rounded-2xl p-7 shadow-sm text-center space-y-6">
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-slate-400 tracking-widest uppercase">随堂单词</span>
+                      <h3 className="text-4xl md:text-5xl font-bold text-slate-800">
+                        {currentLessonVocabWord.word}
+                      </h3>
+                      <p className="text-xs text-slate-400 font-mono italic">
+                        {currentLessonVocabWord.partOfSpeech} · {currentLessonVocabWord.keyInflections}
+                      </p>
+                    </div>
+
+                    {!lessonVocabShowAnswer ? (
+                      <button
+                        onClick={() => setLessonVocabShowAnswer(true)}
+                        className="px-6 py-3 bg-lake-blue-500 hover:bg-lake-blue-600 text-white text-sm font-bold rounded-xl shadow-sm cursor-pointer transition-all active:scale-95"
+                      >
+                        显示中文释义与例句
+                      </button>
+                    ) : (
+                      <div className="space-y-5 pt-5 border-t border-slate-100 text-left animate-fade-in">
+                        <div className="space-y-1.5 bg-slate-50 rounded-xl p-4">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">中文释义</span>
+                          <p className="text-base font-bold text-slate-800">{currentLessonVocabWord.translation}</p>
+                        </div>
+
+                        <div className="border-l-2 border-lake-blue-300 pl-4 space-y-1">
+                          <p className="text-lg font-bold text-slate-800 leading-snug">
+                            {currentLessonVocabWord.exampleSentence}
+                          </p>
+                          <p className="text-xs text-slate-400">{currentLessonVocabWord.translationExample}</p>
+                        </div>
+
+                        <div className="space-y-3 pt-3 border-t border-slate-100">
+                          <span className="text-xs font-bold text-slate-500 block text-center">
+                            这个词在本课里记住了吗？
+                          </span>
+                          <div className="grid grid-cols-3 gap-3">
+                            {[
+                              { grade: "remembered" as const, label: "记住", sub: "轻松想起", bg: "bg-emerald-500 hover:bg-emerald-600" },
+                              { grade: "fuzzy" as const, label: "模糊", sub: "费劲想起", bg: "bg-amber-500 hover:bg-amber-600" },
+                              { grade: "forgotten" as const, label: "不记得", sub: "完全忘了", bg: "bg-red-500 hover:bg-red-600" },
+                            ].map((g) => (
+                              <button
+                                key={g.grade}
+                                onClick={() => handleLessonVocabGrade(g.grade)}
+                                className={`py-3 px-2 rounded-xl font-bold text-white cursor-pointer transition-[scale,box-shadow] hover:shadow active:scale-[0.96] text-center ${g.bg}`}
+                              >
+                                <span className="block text-base">{g.label}</span>
+                                <span className="block text-[10px] opacity-90 font-medium">{g.sub}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm divide-y divide-slate-100">
                   <thead>
@@ -419,6 +534,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
           )}
 
