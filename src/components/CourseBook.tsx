@@ -226,6 +226,18 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
     setLessonVocabShowAnswer(false);
   };
 
+  const returnToCourseList = () => {
+    setSelectedCourse(null);
+    exitLessonVocabPractice();
+  };
+
+  const goToLessonVocabWord = (nextIndex: number) => {
+    const words = selectedCourse?.vocabulary || [];
+    if (nextIndex < 0 || nextIndex >= words.length) return;
+    setLessonVocabPracticeIndex(nextIndex);
+    setLessonVocabShowAnswer(false);
+  };
+
   const handleLessonVocabGrade = (grade: "remembered" | "fuzzy" | "forgotten") => {
     if (!selectedCourse) return;
     const words = selectedCourse.vocabulary || [];
@@ -266,7 +278,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
         <section className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="space-y-1.5 flex-1">
             <button
-              onClick={() => setSelectedCourse(null)}
+              onClick={returnToCourseList}
               className="text-xs font-semibold text-lake-blue-600 hover:text-lake-blue-700 inline-flex items-center gap-1 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" /> 返回我的课本
@@ -280,8 +292,9 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
         </section>
 
         {/* Tab triggers */}
-        <div className="flex border-b border-slate-200">
-          {(["points", "grammar", "vocab", "exercise"] as const).map((tab) => {
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200">
+          <div className="flex overflow-x-auto">
+            {(["points", "grammar", "vocab", "exercise"] as const).map((tab) => {
             const label = {
               points: "本节要点",
               grammar: "语法规则",
@@ -303,6 +316,14 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
               </button>
             );
           })}
+          </div>
+          <button
+            onClick={returnToCourseList}
+            className="mb-2 sm:mb-0 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-lake-blue-300 hover:text-lake-blue-600 text-xs font-bold text-slate-500 transition-colors cursor-pointer inline-flex items-center gap-1.5 self-start sm:self-auto"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            返回课本列表
+          </button>
         </div>
 
         {/* Tab content */}
@@ -427,6 +448,28 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                     <span className="text-[10px] font-semibold text-slate-400">
                       记住 {lessonVocabStats.remembered} · 模糊 {lessonVocabStats.fuzzy} · 不记得 {lessonVocabStats.forgotten}
                     </span>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <button
+                      onClick={() => goToLessonVocabWord(lessonVocabPracticeIndex - 1)}
+                      disabled={lessonVocabPracticeIndex === 0}
+                      className="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+                    >
+                      上一个
+                    </button>
+                    <button
+                      onClick={() => goToLessonVocabWord(lessonVocabPracticeIndex + 1)}
+                      disabled={lessonVocabPracticeIndex >= lessonVocabWords.length - 1}
+                      className="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+                    >
+                      下一个
+                    </button>
+                    <button
+                      onClick={exitLessonVocabPractice}
+                      className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-xs font-bold text-red-500 transition-colors cursor-pointer"
+                    >
+                      返回随堂单词
+                    </button>
                   </div>
 
                   <div className="bg-white border border-slate-100 rounded-2xl p-7 shadow-sm text-center space-y-6">
@@ -803,6 +846,16 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
               </div>
             </div>
           )}
+        </div>
+
+        <div className="flex justify-center pt-2">
+          <button
+            onClick={returnToCourseList}
+            className="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:border-lake-blue-300 hover:text-lake-blue-600 text-xs font-bold text-slate-500 transition-colors cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            返回课本列表
+          </button>
         </div>
       </div>
     );

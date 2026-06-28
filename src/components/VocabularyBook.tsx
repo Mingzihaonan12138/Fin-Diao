@@ -117,6 +117,35 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
   // Filter for mistakes
   const mistakesList = vocab.filter(w => w.isMistake);
 
+  const exitReviewMode = () => {
+    setReviewMode(false);
+    setReviewIndex(0);
+    setReviewQueue([]);
+    setShowAnswer(false);
+  };
+
+  const goToReviewWord = (nextIndex: number) => {
+    if (nextIndex < 0 || nextIndex >= activeReviewQueue.length) return;
+    setReviewIndex(nextIndex);
+    setShowAnswer(false);
+  };
+
+  const exitMistakePractice = () => {
+    setPracticeMistakes(false);
+    setMistakeIndex(0);
+    setMistakeInput("");
+    setMistakeChecked(false);
+    setMistakeCorrect(false);
+  };
+
+  const goToMistake = (nextIndex: number) => {
+    if (nextIndex < 0 || nextIndex >= mistakesList.length) return;
+    setMistakeIndex(nextIndex);
+    setMistakeInput("");
+    setMistakeChecked(false);
+    setMistakeCorrect(false);
+  };
+
   const handleGradeSM2 = async (quality: number) => {
     if (gradingReview) return;
     const word = currentReviewWord;
@@ -154,9 +183,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       if (reviewIndex + 1 < activeReviewQueue.length) {
         setReviewIndex(reviewIndex + 1);
       } else {
-        setReviewMode(false);
-        setReviewIndex(0);
-        setReviewQueue([]);
+        exitReviewMode();
         alert("恭喜！您已完成了本次所有的待复习生词！💡");
       }
     } catch (err) {
@@ -304,21 +331,33 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       {/* REVIEW MODE: Spaced Repetition Review UI */}
       {reviewMode && currentReviewWord && (
         <div className="max-w-2xl mx-auto space-y-6">
-          <div className="flex justify-between items-center bg-white border border-slate-100 rounded-xl px-4 py-3 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-white border border-slate-100 rounded-xl px-4 py-3 shadow-sm">
             <span className="text-xs font-bold text-slate-400 uppercase">
               间隔复习中 ({reviewIndex + 1} / {activeReviewQueue.length})
             </span>
-            <button
-              onClick={() => {
-                setReviewMode(false);
-                setReviewIndex(0);
-                setReviewQueue([]);
-                setShowAnswer(false);
-              }}
-              className="text-xs font-semibold text-red-500 hover:underline"
-            >
-              退出复习
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => goToReviewWord(reviewIndex - 1)}
+                disabled={reviewIndex === 0 || gradingReview}
+                className="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+              >
+                上一个
+              </button>
+              <button
+                onClick={() => goToReviewWord(reviewIndex + 1)}
+                disabled={reviewIndex >= activeReviewQueue.length - 1 || gradingReview}
+                className="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+              >
+                下一个
+              </button>
+              <button
+                onClick={exitReviewMode}
+                disabled={gradingReview}
+                className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-red-500 transition-colors cursor-pointer"
+              >
+                返回生词本
+              </button>
+            </div>
           </div>
 
           {/* Core Word Flashcard */}
@@ -401,16 +440,32 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       {/* MISTAKE RETEST MODE */}
       {practiceMistakes && mistakesList.length > 0 && (
         <div className="max-w-xl mx-auto space-y-6">
-          <div className="flex justify-between items-center bg-white border border-slate-100 rounded-xl px-4 py-3 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-white border border-slate-100 rounded-xl px-4 py-3 shadow-sm">
             <span className="text-xs font-bold text-slate-400 uppercase">
               错词拼写挑战 ({mistakeIndex + 1} / {mistakesList.length})
             </span>
-            <button
-              onClick={() => setPracticeMistakes(false)}
-              className="text-xs font-semibold text-red-500 hover:underline"
-            >
-              退出挑战
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => goToMistake(mistakeIndex - 1)}
+                disabled={mistakeIndex === 0}
+                className="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+              >
+                上一个
+              </button>
+              <button
+                onClick={() => goToMistake(mistakeIndex + 1)}
+                disabled={mistakeIndex >= mistakesList.length - 1}
+                className="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+              >
+                下一个
+              </button>
+              <button
+                onClick={exitMistakePractice}
+                className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-xs font-bold text-red-500 transition-colors cursor-pointer"
+              >
+                返回错词集
+              </button>
+            </div>
           </div>
 
           {/* Keyboard Helper */}
