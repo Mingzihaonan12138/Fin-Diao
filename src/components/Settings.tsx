@@ -50,9 +50,10 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
     setSuccessMsg("");
     setErrorMsg("");
     
-    if (!newKey.trim()) return;
-    if (!newKey.trim().startsWith("AIzaSy")) {
-      setErrorMsg("无效的 Google Gemini API Key。格式应该以 'AIzaSy' 开头。");
+    const trimmedKey = newKey.trim();
+    if (!trimmedKey) return;
+    if (trimmedKey.length < 20) {
+      setErrorMsg("这个 API Key 看起来太短了。请检查是否复制完整。");
       return;
     }
 
@@ -61,7 +62,7 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
       const res = await fetch("/api/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: newKey.trim() }),
+        body: JSON.stringify({ key: trimmedKey }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -167,7 +168,7 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
           <div className="relative flex-1">
             <input
               type="password"
-              placeholder="输入新的 Gemini API Key (以 AIzaSy 开头)"
+              placeholder="输入新的 Gemini API Key"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
               className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 focus:border-lake-blue-500 focus:outline-none transition-colors text-sm font-mono"

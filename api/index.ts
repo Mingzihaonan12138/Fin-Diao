@@ -210,12 +210,13 @@ app.post("/api/keys", async (req, res) => {
       });
     }
     const { key } = req.body;
-    if (!key || typeof key !== "string" || !key.startsWith("AIzaSy")) {
-      return res.status(400).json({ error: "无效的 Google Gemini API Key。它应该以 'AIzaSy' 开头。" });
+    const trimmedKey = typeof key === "string" ? key.trim() : "";
+    if (!trimmedKey || trimmedKey.length < 20) {
+      return res.status(400).json({ error: "无效的 Gemini API Key。请检查是否复制完整。" });
     }
 
     const newDoc = await db.collection("gemini_keys").add({
-      key: key.trim(),
+      key: trimmedKey,
       addedAt: new Date().toISOString(),
     });
 
@@ -254,7 +255,7 @@ app.post("/api/upload", async (req, res) => {
     const keysPool = await getActiveGeminiKeys();
     if (keysPool.length === 0) {
       return res.status(400).json({
-        error: "没有可用的 Gemini API 密钥。请在‘系统设置’中添加至少一个以 'AIzaSy' 开头的 Gemini 密钥！"
+        error: "没有可用的 Gemini API 密钥。请在‘系统设置’中添加至少一个 Gemini API Key！"
       });
     }
 
