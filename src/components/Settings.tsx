@@ -12,6 +12,7 @@ interface SettingsProps {
 export default function Settings({ user, loading, onEnterGuestMode, isGuest }: SettingsProps) {
   const [keys, setKeys] = useState<{ id: string; maskedKey: string; addedAt: string }[]>([]);
   const [systemKeyConfigured, setSystemKeyConfigured] = useState(false);
+  const [keyStorageEnabled, setKeyStorageEnabled] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [fetchingKeys, setFetchingKeys] = useState(false);
   const [addingKey, setAddingKey] = useState(false);
@@ -29,6 +30,7 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
       if (healthRes.ok) {
         const health = await healthRes.json();
         setSystemKeyConfigured(Boolean(health.geminiEnvKeyConfigured));
+        setKeyStorageEnabled(Boolean(health.adminFirestoreEnabled));
       }
       if (keysRes.ok) {
         const data = await keysRes.json();
@@ -49,6 +51,11 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
     e.preventDefault();
     setSuccessMsg("");
     setErrorMsg("");
+
+    if (!keyStorageEnabled) {
+      setErrorMsg("网页添加备用密钥需要配置 FIREBASE_SERVICE_ACCOUNT。也可以直接在 Vercel 环境变量 GEMINI_API_KEYS 中配置多个 Key。");
+      return;
+    }
     
     const trimmedKey = newKey.trim();
     if (!trimmedKey) return;
@@ -163,6 +170,17 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
           </div>
         )}
 
+        {!keyStorageEnabled && (
+          <div className="bg-amber-50 text-amber-800 border border-amber-100 text-xs font-medium p-3.5 rounded-xl flex items-start gap-2 leading-relaxed">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              当前未配置 Firebase Admin 云端密钥库，网页里不能保存备用 Key。你可以在 Vercel 环境变量中设置
+              <b> GEMINI_API_KEYS </b>
+              （多个 Key 用逗号或换行分隔），部署后后端会自动轮询使用。
+            </span>
+          </div>
+        )}
+
         {/* Form to Add Key */}
         <form onSubmit={handleAddKey} className="flex gap-3 max-w-2xl">
           <div className="relative flex-1">
@@ -171,6 +189,7 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
               placeholder="输入新的 Gemini API Key"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
+              disabled={!keyStorageEnabled}
               className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 focus:border-lake-blue-500 focus:outline-none transition-colors text-sm font-mono"
             />
             <div className="absolute inset-y-0 right-3 flex items-center text-slate-400">
@@ -179,7 +198,7 @@ export default function Settings({ user, loading, onEnterGuestMode, isGuest }: S
           </div>
           <button
             type="submit"
-            disabled={addingKey || !newKey.trim()}
+            disabled={addingKey || !newKey.trim() || !keyStorageEnabled}
             className="px-5 py-2.5 bg-lake-blue-500 hover:bg-lake-blue-600 disabled:bg-slate-200 text-white font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer"
           >
             {addingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
