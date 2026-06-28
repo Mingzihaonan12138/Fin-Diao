@@ -75,6 +75,12 @@ function setLocal<T>(key: string, data: T[]): void {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
+function withoutUndefined<T extends Record<string, any>>(data: T): T {
+  return Object.fromEntries(
+    Object.entries(data).filter(([, value]) => value !== undefined)
+  ) as T;
+}
+
 // 1. SAVE COURSE NOTE
 export async function saveCourseNote(course: CourseNote, user: any): Promise<void> {
   if (user) {
@@ -149,10 +155,10 @@ export async function saveVocabularyReviewProgress(
       throw new Error("无法保存复习结果：这个单词缺少云端文档 ID。");
     }
 
-    await updateDoc(doc(db, "vocabulary", word.id), {
+    await updateDoc(doc(db, "vocabulary", word.id), withoutUndefined({
       ...reviewPatch,
       userId: user.uid,
-    });
+    }));
   } else {
     const list = getLocal<VocabularyWord>(LOCAL_VOCAB);
     const existingIndex = list.findIndex(w => w.id === word.id);

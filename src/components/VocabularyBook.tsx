@@ -141,7 +141,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       nextReviewAt,
       correctCount: quality >= 3 ? (word.correctCount || 0) + 1 : (word.correctCount || 0),
       incorrectCount: quality < 3 ? (word.incorrectCount || 0) + 1 : (word.incorrectCount || 0),
-      isMistake: quality < 3 ? true : word.isMistake // Push to mistake book if quality is poor
+      ...(quality < 3 ? { isMistake: true } : word.isMistake !== undefined ? { isMistake: word.isMistake } : {}),
     };
 
     setGradingReview(true);
