@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { CourseNote, VocabularyWord, FillBlankQuestion, ConjugationTable, TranslationQuestion } from "../types";
 import { deleteCourseNote, saveVocabularyWord, saveExerciseRecord, saveCourseNote, loadVocabularyWords } from "../lib/sync";
 import StickyNotes from "./StickyNotes";
+import SpeakButton from "./SpeakButton";
 import {
   BookOpen,
   Trash2,
@@ -475,9 +476,12 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                   <div className="bg-white border border-slate-100 rounded-2xl p-7 shadow-sm text-center space-y-6">
                     <div className="space-y-2">
                       <span className="text-xs font-bold text-slate-400 tracking-widest uppercase">随堂单词</span>
-                      <h3 className="text-4xl md:text-5xl font-bold text-slate-800">
-                        {currentLessonVocabWord.word}
-                      </h3>
+                      <div className="flex items-center justify-center gap-2">
+                        <h3 className="text-4xl md:text-5xl font-bold text-slate-800">
+                          {currentLessonVocabWord.word}
+                        </h3>
+                        <SpeakButton text={currentLessonVocabWord.word} size="md" />
+                      </div>
                       <p className="text-xs text-slate-400 font-mono italic">
                         {currentLessonVocabWord.partOfSpeech} · {currentLessonVocabWord.keyInflections}
                       </p>
@@ -547,7 +551,10 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                       return (
                         <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                           <td className="py-4 px-4 space-y-1">
-                            <span className="text-base font-bold text-slate-800">{w.word}</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-base font-bold text-slate-800">{w.word}</span>
+                              <SpeakButton text={w.word} />
+                            </div>
                             <p className="text-[10px] font-semibold font-mono text-slate-400">{w.keyInflections}</p>
                           </td>
                           <td className="py-4 px-4 text-xs font-semibold text-slate-500">{w.partOfSpeech}</td>

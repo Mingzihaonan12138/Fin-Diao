@@ -1,6 +1,7 @@
 import { useState, Fragment } from "react";
 import { VocabularyWord } from "../types";
 import { calculateSM2, saveVocabularyReviewProgress, deleteVocabularyWord } from "../lib/sync";
+import SpeakButton from "./SpeakButton";
 import { 
   BookMarked, 
   Trash2, 
@@ -101,6 +102,16 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
   const [mistakeChecked, setMistakeChecked] = useState(false);
   const [mistakeCorrect, setMistakeCorrect] = useState(false);
   const [mistakeActiveInput, setMistakeActiveInput] = useState(false);
+
+  // 随机测验 state（从生词本随机抽词，看芬兰语选中文词义）
+  const [quizMode, setQuizMode] = useState(false);
+  const [quizQueue, setQuizQueue] = useState<VocabularyWord[]>([]);
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [quizOptions, setQuizOptions] = useState<string[]>([]);
+  const [quizPicked, setQuizPicked] = useState<string | null>(null);
+  const [quizCorrectCount, setQuizCorrectCount] = useState(0);
+  const [quizWrongWords, setQuizWrongWords] = useState<VocabularyWord[]>([]);
+  const [quizSaving, setQuizSaving] = useState(false);
 
   // Helper characters for Finnish
   const finnishChars = ["ä", "ö", "å", "Ä", "Ö", "Å"];
@@ -263,11 +274,108 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
     setMistakeInput(prev => prev + char);
   };
 
+  // ---- 随机测验 ----
+  const shuffle = <T,>(arr: T[]): T[] => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+
+  // 为某个词生成 4 个中文选项（正确项 + 3 个来自其它词的干扰项）
+  const buildQuizOptions = (word: VocabularyWord, pool: VocabularyWord[]): string[] => {
+    const correct = word.translation;
+    const distractors = shuffle(
+      pool
+        .filter(w => w.id !== word.id && w.translation && w.translation !== correct)
+        .map(w => w.translation)
+    );
+    const uniqueDistractors = Array.from(new Set(distractors)).slice(0, 3);
+    return shuffle([correct, ...uniqueDistractors]);
+  };
+
+  const quizPool = vocab; // 生词本全部词（含已归入错词的），题量更足
+  const currentQuizWord = quizQueue[quizIndex];
+
+  const startQuiz = () => {
+    const picked = shuffle(quizPool).slice(0, Math.min(15, quizPool.length));
+    if (picked.length === 0) return;
+    setQuizQueue(picked);
+    setQuizIndex(0);
+    setQuizOptions(buildQuizOptions(picked[0], quizPool));
+    setQuizPicked(null);
+    setQuizCorrectCount(0);
+    setQuizWrongWords([]);
+    setQuizMode(true);
+  };
+
+  const exitQuiz = () => {
+    setQuizMode(false);
+    setQuizQueue([]);
+    setQuizIndex(0);
+    setQuizPicked(null);
+  };
+
+  const handleQuizPick = (option: string) => {
+    if (quizPicked) return; // 已作答
+    setQuizPicked(option);
+    if (option === currentQuizWord.translation) {
+      setQuizCorrectCount(c => c + 1);
+    } else {
+      setQuizWrongWords(prev =>
+        prev.some(w => w.id === currentQuizWord.id) ? prev : [...prev, currentQuizWord]
+      );
+    }
+  };
+
+  const finishQuiz = async (wrongWords: VocabularyWord[]) => {
+    // 答错的词标记进错词集锦（尽量保留其 SM2 进度）
+    setQuizSaving(true);
+    try {
+      for (const w of wrongWords) {
+        await saveVocabularyReviewProgress(w, user, {
+          repetitions: w.repetitions || 0,
+          easeFactor: w.easeFactor || 2.5,
+          intervalDays: w.intervalDays || 0,
+          nextReviewAt: w.nextReviewAt || new Date().toISOString(),
+          correctCount: w.correctCount || 0,
+          incorrectCount: (w.incorrectCount || 0) + 1,
+          isMistake: true,
+        });
+      }
+      if (wrongWords.length) await Promise.resolve(onRefresh());
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setQuizSaving(false);
+    }
+    const total = quizQueue.length;
+    const right = total - wrongWords.length;
+    alert(
+      `测验完成！答对 ${right} / ${total} 题。` +
+      (wrongWords.length ? `\n答错的 ${wrongWords.length} 个词已加入「错词集锦」，可去专项重练。` : "\n满分，太强了！🎉")
+    );
+    exitQuiz();
+  };
+
+  const nextQuiz = () => {
+    if (quizIndex + 1 < quizQueue.length) {
+      const ni = quizIndex + 1;
+      setQuizIndex(ni);
+      setQuizOptions(buildQuizOptions(quizQueue[ni], quizPool));
+      setQuizPicked(null);
+    } else {
+      finishQuiz(quizWrongWords);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       
       {/* Tab Triggers */}
-      {!reviewMode && !practiceMistakes && (
+      {!reviewMode && !practiceMistakes && !quizMode && (
         <div className="flex justify-between items-center flex-wrap gap-4 border-b border-slate-200">
           <div className="flex">
             <button
@@ -294,7 +402,16 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
             </button>
           </div>
 
-          <div className="pb-2">
+          <div className="pb-2 flex flex-wrap gap-2">
+            {subTab === "book" && quizPool.length >= 4 && (
+              <button
+                onClick={startQuiz}
+                className="px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                随机测验 ({Math.min(15, quizPool.length)} 题)
+              </button>
+            )}
             {subTab === "book" && pendingReviews.length > 0 && (
               <button
                 onClick={() => {
@@ -368,9 +485,12 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
 
             <div className="space-y-3 py-6">
               <span className="text-xs font-bold text-slate-400 tracking-widest uppercase">芬兰语单词</span>
-              <h3 className="text-4xl md:text-5xl font-bold font-sans text-slate-800 tracking-wide">
-                {currentReviewWord.word}
-              </h3>
+              <div className="flex items-center justify-center gap-2">
+                <h3 className="text-4xl md:text-5xl font-bold font-sans text-slate-800 tracking-wide">
+                  {currentReviewWord.word}
+                </h3>
+                <SpeakButton text={currentReviewWord.word} size="md" />
+              </div>
               <p className="text-xs text-slate-400 font-mono italic">
                 {currentReviewWord.partOfSpeech} • {currentReviewWord.keyInflections}
               </p>
@@ -557,8 +677,92 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
         </div>
       )}
 
+      {/* RANDOM QUIZ MODE：看芬兰语单词，选正确中文词义 */}
+      {quizMode && currentQuizWord && (
+        <div className="max-w-xl mx-auto space-y-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-white border border-slate-100 rounded-xl px-4 py-3 shadow-sm">
+            <span className="text-xs font-bold text-slate-400 uppercase">
+              随机测验 ({quizIndex + 1} / {quizQueue.length}) · 已对 {quizCorrectCount}
+            </span>
+            <button
+              onClick={exitQuiz}
+              disabled={quizSaving}
+              className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-40 text-xs font-bold text-red-500 transition-colors cursor-pointer"
+            >
+              结束测验
+            </button>
+          </div>
+
+          <div className="bg-white border border-slate-100 rounded-2xl p-6 md:p-8 shadow-md text-center space-y-6">
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">这个词是什么意思？</span>
+              <div className="flex items-center justify-center gap-2">
+                <h3 className="text-3xl md:text-4xl font-bold font-sans text-slate-800 tracking-wide">
+                  {currentQuizWord.word}
+                </h3>
+                <SpeakButton text={currentQuizWord.word} size="md" />
+              </div>
+              <p className="text-xs text-slate-400 font-mono italic">
+                {currentQuizWord.partOfSpeech}{currentQuizWord.keyInflections ? ` · ${currentQuizWord.keyInflections}` : ""}
+              </p>
+            </div>
+
+            <div className="grid gap-3">
+              {quizOptions.map((opt) => {
+                const answered = quizPicked !== null;
+                const isCorrect = opt === currentQuizWord.translation;
+                const isPicked = opt === quizPicked;
+                let cls = "border-slate-200 hover:border-violet-400 hover:bg-violet-50/40 text-slate-700";
+                if (answered && isCorrect) cls = "border-emerald-300 bg-emerald-50 text-emerald-800";
+                else if (answered && isPicked && !isCorrect) cls = "border-red-300 bg-red-50 text-red-800";
+                else if (answered) cls = "border-slate-100 text-slate-400";
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => handleQuizPick(opt)}
+                    disabled={answered}
+                    className={`w-full px-4 py-3 text-left text-sm font-semibold rounded-xl border transition-all ${answered ? "cursor-default" : "cursor-pointer"} ${cls}`}
+                  >
+                    {opt}
+                    {answered && isCorrect && <Check className="w-4 h-4 inline ml-2 -mt-0.5" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {quizPicked !== null && (
+              <div className="space-y-4 animate-fade-in text-left pt-2 border-t border-slate-100">
+                {quizPicked !== currentQuizWord.translation && (
+                  <p className="text-xs font-semibold text-red-600 bg-red-50 rounded-lg p-3">
+                    ❌ 正确词义：<b>{currentQuizWord.translation}</b>（此词已加入错词集锦）
+                  </p>
+                )}
+                {currentQuizWord.exampleSentence && (
+                  <div className="flex items-start gap-2 text-sm text-slate-600 bg-slate-50 rounded-lg p-3">
+                    <SpeakButton text={currentQuizWord.exampleSentence} />
+                    <span>
+                      <span className="font-semibold text-slate-800">{currentQuizWord.exampleSentence}</span>
+                      {currentQuizWord.translationExample && (
+                        <span className="block text-xs text-slate-400 mt-0.5">{currentQuizWord.translationExample}</span>
+                      )}
+                    </span>
+                  </div>
+                )}
+                <button
+                  onClick={nextQuiz}
+                  disabled={quizSaving}
+                  className="w-full py-2.5 bg-violet-500 hover:bg-violet-600 disabled:opacity-50 text-white font-bold text-sm rounded-xl cursor-pointer shadow-sm transition-colors"
+                >
+                  {quizIndex + 1 < quizQueue.length ? "下一题" : (quizSaving ? "正在保存…" : "完成测验")}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* STANDARD DISPLAY: Vocabulary List */}
-      {!reviewMode && !practiceMistakes && subTab === "book" && (
+      {!reviewMode && !practiceMistakes && !quizMode && subTab === "book" && (
         <section className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
           {vocab.filter(w => !w.isMistake).length === 0 ? (
             <div className="py-12 text-center text-slate-400 space-y-3">
@@ -590,17 +794,20 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
                     <Fragment key={w.id}>
                     <tr className="hover:bg-slate-50/50 transition-colors">
                       <td className="py-4 px-4">
-                        <button
-                          onClick={() => setExpandedId(open ? null : w.id)}
-                          className="flex items-start gap-1.5 text-left cursor-pointer group"
-                          title="展开完整变格/变位"
-                        >
-                          <ChevronRight className={`w-4 h-4 mt-0.5 shrink-0 transition-transform ${open ? "rotate-90 text-lake-blue-500" : "text-slate-300"}`} />
-                          <span>
-                            <span className="block text-base font-bold text-slate-800 group-hover:text-lake-blue-600 transition-colors">{w.word}</span>
-                            <span className="block text-[10px] font-semibold font-mono text-slate-400">{w.keyInflections}</span>
-                          </span>
-                        </button>
+                        <div className="flex items-start gap-1">
+                          <button
+                            onClick={() => setExpandedId(open ? null : w.id)}
+                            className="flex items-start gap-1.5 text-left cursor-pointer group"
+                            title="展开完整变格/变位"
+                          >
+                            <ChevronRight className={`w-4 h-4 mt-0.5 shrink-0 transition-transform ${open ? "rotate-90 text-lake-blue-500" : "text-slate-300"}`} />
+                            <span>
+                              <span className="block text-base font-bold text-slate-800 group-hover:text-lake-blue-600 transition-colors">{w.word}</span>
+                              <span className="block text-[10px] font-semibold font-mono text-slate-400">{w.keyInflections}</span>
+                            </span>
+                          </button>
+                          <SpeakButton text={w.word} />
+                        </div>
                       </td>
                       <td className="py-4 px-4 text-xs font-semibold text-slate-500">{w.partOfSpeech}</td>
                       <td className="py-4 px-4 text-sm font-medium text-slate-700">{w.translation}</td>
@@ -649,7 +856,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       )}
 
       {/* STANDARD DISPLAY: Mistakes List */}
-      {!reviewMode && !practiceMistakes && subTab === "mistakes" && (
+      {!reviewMode && !practiceMistakes && !quizMode && subTab === "mistakes" && (
         <section className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
           {mistakesList.length === 0 ? (
             <div className="py-12 text-center text-slate-400 space-y-3">
