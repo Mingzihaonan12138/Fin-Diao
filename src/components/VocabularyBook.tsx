@@ -132,8 +132,15 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
   // Filter for mistakes
   const mistakesList = vocab.filter(w => w.isMistake);
 
-  // 待巩固：复习时评"模糊/不记得"的词
-  const weakList = vocab.filter(w => w.needsPractice);
+  // 待巩固：复习时评"模糊/不记得"的词。
+  // 含历史回填——needsPractice 字段是后加的，之前评过的词没有标记，
+  // 用 SM2 难度系数补上：easeFactor 只被复习评分改动（记住↑ 模糊/不记得↓），
+  // <2.5（默认值）即曾评过模糊/不记得且未重新记牢。手动"记住/已掌握"会置 false 覆盖。
+  const weakList = vocab.filter(w => {
+    if (w.needsPractice === true) return true;
+    if (w.needsPractice === false) return false;
+    return typeof w.easeFactor === "number" && w.easeFactor < 2.5;
+  });
 
   const exitReviewMode = () => {
     setReviewMode(false);
