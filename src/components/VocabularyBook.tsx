@@ -1,7 +1,7 @@
-import { useState, Fragment } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { VocabularyWord } from "../types";
 import { calculateSM2, saveVocabularyReviewProgress, deleteVocabularyWord } from "../lib/sync";
-import SpeakButton from "./SpeakButton";
+import SpeakButton, { speakFinnish } from "./SpeakButton";
 import { 
   BookMarked, 
   Trash2, 
@@ -112,6 +112,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
   const [quizCorrectCount, setQuizCorrectCount] = useState(0);
   const [quizWrongWords, setQuizWrongWords] = useState<VocabularyWord[]>([]);
   const [quizSaving, setQuizSaving] = useState(false);
+  const [quizListening, setQuizListening] = useState(false); // true=听音选意，隐藏单词只放发音
 
   // Helper characters for Finnish
   const finnishChars = ["ä", "ö", "å", "Ä", "Ö", "Å"];
@@ -299,9 +300,10 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
   const quizPool = vocab; // 生词本全部词（含已归入错词的），题量更足
   const currentQuizWord = quizQueue[quizIndex];
 
-  const startQuiz = () => {
+  const startQuiz = (listening: boolean) => {
     const picked = shuffle(quizPool).slice(0, Math.min(15, quizPool.length));
     if (picked.length === 0) return;
+    setQuizListening(listening);
     setQuizQueue(picked);
     setQuizIndex(0);
     setQuizOptions(buildQuizOptions(picked[0], quizPool));
@@ -310,6 +312,14 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
     setQuizWrongWords([]);
     setQuizMode(true);
   };
+
+  // 听音选意模式：每出一道新题自动读一遍单词（点"下一题"是用户手势，autoplay 不会被拦）
+  useEffect(() => {
+    if (quizMode && quizListening && quizPicked === null && currentQuizWord) {
+      speakFinnish(currentQuizWord.word);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizMode, quizListening, quizIndex]);
 
   const exitQuiz = () => {
     setQuizMode(false);
@@ -405,11 +415,20 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
           <div className="pb-2 flex flex-wrap gap-2">
             {subTab === "book" && quizPool.length >= 4 && (
               <button
-                onClick={startQuiz}
+                onClick={() => startQuiz(false)}
                 className="px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-200" />
                 随机测验 ({Math.min(15, quizPool.length)} 题)
+              </button>
+            )}
+            {subTab === "book" && quizPool.length >= 4 && (
+              <button
+                onClick={() => startQuiz(true)}
+                className="px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Volume2 className="w-3.5 h-3.5 text-teal-100" />
+                听音选意 ({Math.min(15, quizPool.length)} 题)
               </button>
             )}
             {subTab === "book" && pendingReviews.length > 0 && (
@@ -695,16 +714,35 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
 
           <div className="bg-white border border-slate-100 rounded-2xl p-6 md:p-8 shadow-md text-center space-y-6">
             <div className="space-y-2">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">这个词是什么意思？</span>
-              <div className="flex items-center justify-center gap-2">
-                <h3 className="text-3xl md:text-4xl font-bold font-sans text-slate-800 tracking-wide">
-                  {currentQuizWord.word}
-                </h3>
-                <SpeakButton text={currentQuizWord.word} size="md" />
-              </div>
-              <p className="text-xs text-slate-400 font-mono italic">
-                {currentQuizWord.partOfSpeech}{currentQuizWord.keyInflections ? ` · ${currentQuizWord.keyInflections}` : ""}
-              </p>
+              {quizListening && quizPicked === null ? (
+                <>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">听发音，选出正确的中文词义</span>
+                  <button
+                    type="button"
+                    onClick={() => speakFinnish(currentQuizWord.word)}
+                    title="重复播放"
+                    className="mx-auto w-20 h-20 rounded-full bg-teal-500 hover:bg-teal-600 text-white flex items-center justify-center shadow-md transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Volume2 className="w-9 h-9" />
+                  </button>
+                  <p className="text-xs text-slate-400">点击喇叭可重复播放</p>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                    {quizListening ? "刚才这个词是" : "这个词是什么意思？"}
+                  </span>
+                  <div className="flex items-center justify-center gap-2">
+                    <h3 className="text-3xl md:text-4xl font-bold font-sans text-slate-800 tracking-wide">
+                      {currentQuizWord.word}
+                    </h3>
+                    <SpeakButton text={currentQuizWord.word} size="md" />
+                  </div>
+                  <p className="text-xs text-slate-400 font-mono italic">
+                    {currentQuizWord.partOfSpeech}{currentQuizWord.keyInflections ? ` · ${currentQuizWord.keyInflections}` : ""}
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="grid gap-3">
