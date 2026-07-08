@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { CourseNote, VocabularyWord, FillBlankQuestion, ConjugationTable, TranslationQuestion } from "../types";
 import { deleteCourseNote, saveVocabularyWord, saveExerciseRecord, saveCourseNote, loadVocabularyWords } from "../lib/sync";
 import StickyNotes from "./StickyNotes";
-import SpeakButton from "./SpeakButton";
+import SpeakButton, { speakFinnish } from "./SpeakButton";
 import {
   BookOpen,
   Trash2,
@@ -268,6 +268,45 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
     exitLessonVocabPractice();
   };
 
+  // 随堂单词练习的键盘快捷键：空格翻卡 / 1·2·3 评分 / ←→ 前后 / 回车下一个 / P 重听 / Esc 退出
+  useEffect(() => {
+    if (!lessonVocabPracticeMode || !selectedCourse) return;
+    const words = selectedCourse.vocabulary || [];
+    const cur = words[lessonVocabPracticeIndex];
+    if (!cur) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      const k = e.key.toLowerCase();
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        if (!lessonVocabShowAnswer) setLessonVocabShowAnswer(true);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (!lessonVocabShowAnswer) setLessonVocabShowAnswer(true);
+        else goToLessonVocabWord(lessonVocabPracticeIndex + 1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        goToLessonVocabWord(lessonVocabPracticeIndex + 1);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goToLessonVocabWord(lessonVocabPracticeIndex - 1);
+      } else if (lessonVocabShowAnswer && (e.key === "1" || e.key === "2" || e.key === "3")) {
+        e.preventDefault();
+        handleLessonVocabGrade(e.key === "1" ? "remembered" : e.key === "2" ? "fuzzy" : "forgotten");
+      } else if (k === "p" || k === "r") {
+        e.preventDefault();
+        speakFinnish(cur.word);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        exitLessonVocabPractice();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lessonVocabPracticeMode, selectedCourse, lessonVocabPracticeIndex, lessonVocabShowAnswer]);
+
   if (selectedCourse) {
     const lessonVocabWords = selectedCourse.vocabulary || [];
     const currentLessonVocabWord = lessonVocabWords[lessonVocabPracticeIndex];
@@ -472,6 +511,10 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                       返回随堂单词
                     </button>
                   </div>
+
+                  <p className="hidden sm:block text-center text-[11px] text-slate-400">
+                    键盘：<b>空格</b> 翻卡 · <b>1/2/3</b> 记住/模糊/不记得 · <b>←/→</b> 切换 · <b>回车</b> 下一个 · <b>P</b> 发音 · <b>Esc</b> 退出
+                  </p>
 
                   <div className="bg-white border border-slate-100 rounded-2xl p-7 shadow-sm text-center space-y-6">
                     <div className="space-y-2">

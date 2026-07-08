@@ -53,7 +53,8 @@ export interface VocabularyWord {
   easeFactor: number;
   repetitions: number;
   nextReviewAt: string; // ISO date string
-  isMistake?: boolean;  // True if it is currently in the mistake book
+  isMistake?: boolean;  // True if it is currently in the mistake book (拼写/测验答错)
+  needsPractice?: boolean; // True if 复习时评"模糊/不记得" → 进"待巩固"池
   incorrectCount: number;
   correctCount: number;
   inflections?: WordInflections;

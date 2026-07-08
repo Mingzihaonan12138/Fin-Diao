@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { VocabularyWord } from "../types";
 import { calculateSM2, saveVocabularyReviewProgress, deleteVocabularyWord } from "../lib/sync";
 import SpeakButton, { speakFinnish } from "./SpeakButton";
@@ -85,7 +85,7 @@ function ParadigmPanel({ w }: { w: VocabularyWord }) {
 }
 
 export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBookProps) {
-  const [subTab, setSubTab] = useState<"book" | "mistakes">("book");
+  const [subTab, setSubTab] = useState<"book" | "mistakes" | "consolidate">("book");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
   // Spaced repetition state
@@ -117,6 +117,9 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
   // Helper characters for Finnish
   const finnishChars = ["ä", "ö", "å", "Ä", "Ö", "Å"];
 
+  // 错词拼写输入框：进入/切题时自动聚焦，直接就能打字
+  const mistakeInputRef = useRef<HTMLInputElement>(null);
+
   // Filter words for active reviews (nextReviewAt <= now, or not reviewed yet)
   const pendingReviews = vocab.filter(w => {
     if (w.isMistake) return false; // Filter out mistakes
@@ -128,6 +131,9 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
 
   // Filter for mistakes
   const mistakesList = vocab.filter(w => w.isMistake);
+
+  // 待巩固：复习时评"模糊/不记得"的词
+  const weakList = vocab.filter(w => w.needsPractice);
 
   const exitReviewMode = () => {
     setReviewMode(false);
@@ -182,7 +188,9 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       nextReviewAt,
       correctCount: quality >= 3 ? (word.correctCount || 0) + 1 : (word.correctCount || 0),
       incorrectCount: quality < 3 ? (word.incorrectCount || 0) + 1 : (word.incorrectCount || 0),
-      ...(quality < 3 ? { isMistake: true } : word.isMistake !== undefined ? { isMistake: word.isMistake } : {}),
+      // 复习评分喂"待巩固"池：只有"记住(5)"才移出，"模糊(3)/不记得(0)"进池。
+      // 不再动 isMistake（错词集锦只由拼写/测验答错维护，与背记分离）。
+      needsPractice: quality < 5,
     };
 
     setGradingReview(true);
@@ -210,6 +218,33 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
     if (!window.confirm("确定要将这个词语从生词本永久删除吗？")) return;
     try {
       await deleteVocabularyWord(id, user);
+      onRefresh();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // 只背"待巩固"的词：用同一套闪卡复习，队列限定为这些词
+  const startWeakReview = () => {
+    if (weakList.length === 0) return;
+    setReviewIndex(0);
+    setReviewQueue([...weakList]);
+    setReviewMode(true);
+    setShowAnswer(false);
+  };
+
+  // 手动把一个词标记为"已掌握"，移出待巩固池
+  const handleMasterWord = async (word: VocabularyWord) => {
+    try {
+      await saveVocabularyReviewProgress(word, user, {
+        repetitions: word.repetitions || 0,
+        easeFactor: word.easeFactor || 2.5,
+        intervalDays: word.intervalDays || 0,
+        nextReviewAt: word.nextReviewAt || new Date().toISOString(),
+        correctCount: word.correctCount || 0,
+        incorrectCount: word.incorrectCount || 0,
+        needsPractice: false,
+      });
       onRefresh();
     } catch (err) {
       console.error(err);
@@ -381,6 +416,81 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
     }
   };
 
+  const typingInField = (e: KeyboardEvent) => {
+    const t = e.target as HTMLElement | null;
+    return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA");
+  };
+
+  // 键盘快捷键 · 间隔复习闪卡
+  useEffect(() => {
+    if (!reviewMode || !currentReviewWord) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (typingInField(e)) return;
+      const k = e.key.toLowerCase();
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        if (!showAnswer) setShowAnswer(true);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (!showAnswer) setShowAnswer(true);
+        else if (!gradingReview) goToReviewWord(reviewIndex + 1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (!gradingReview) goToReviewWord(reviewIndex + 1);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        if (!gradingReview) goToReviewWord(reviewIndex - 1);
+      } else if (showAnswer && !gradingReview && (e.key === "1" || e.key === "2" || e.key === "3")) {
+        e.preventDefault();
+        handleGradeSM2(e.key === "1" ? 5 : e.key === "2" ? 3 : 0);
+      } else if (k === "p" || k === "r") {
+        e.preventDefault();
+        speakFinnish(currentReviewWord.word);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        exitReviewMode();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewMode, currentReviewWord, showAnswer, reviewIndex, activeReviewQueue, gradingReview]);
+
+  // 键盘快捷键 · 随机测验 / 听音选意
+  useEffect(() => {
+    if (!quizMode || !currentQuizWord) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (typingInField(e)) return;
+      const k = e.key.toLowerCase();
+      if (["1", "2", "3", "4"].includes(e.key)) {
+        const idx = parseInt(e.key, 10) - 1;
+        if (quizPicked === null && idx < quizOptions.length) {
+          e.preventDefault();
+          handleQuizPick(quizOptions[idx]);
+        }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (quizPicked !== null && !quizSaving) nextQuiz();
+      } else if (k === "p" || k === "r") {
+        e.preventDefault();
+        speakFinnish(currentQuizWord.word);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        exitQuiz();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizMode, currentQuizWord, quizOptions, quizPicked, quizSaving, quizIndex, quizWrongWords]);
+
+  // 错词拼写：进入/切题时自动聚焦输入框
+  useEffect(() => {
+    if (practiceMistakes && !mistakeChecked) {
+      mistakeInputRef.current?.focus();
+    }
+  }, [practiceMistakes, mistakeIndex, mistakeChecked]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       
@@ -409,6 +519,17 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
             >
               <AlertTriangle className="w-4 h-4" />
               错词集锦 ({mistakesList.length})
+            </button>
+            <button
+              onClick={() => setSubTab("consolidate")}
+              className={`px-6 py-3 font-semibold text-sm border-b-2 transition-all cursor-pointer -mb-[2px] flex items-center gap-2 ${
+                subTab === "consolidate"
+                  ? "border-lake-blue-500 text-lake-blue-600 font-bold"
+                  : "border-transparent text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              <GraduationCap className="w-4 h-4" />
+              待巩固 ({weakList.length})
             </button>
           </div>
 
@@ -460,6 +581,16 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
                 立即开始错词拼写重练
               </button>
             )}
+
+            {subTab === "consolidate" && weakList.length > 0 && (
+              <button
+                onClick={startWeakReview}
+                className="px-4 py-2 bg-lake-blue-500 hover:bg-lake-blue-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <GraduationCap className="w-3.5 h-3.5 text-amber-200" />
+                只背这些待巩固词 ({weakList.length})
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -495,6 +626,10 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
               </button>
             </div>
           </div>
+
+          <p className="hidden sm:block text-center text-[11px] text-slate-400">
+            键盘：<b>空格</b> 翻卡 · <b>1/2/3</b> 记住/模糊/不记得 · <b>←/→</b> 切换 · <b>回车</b> 下一个 · <b>P</b> 发音 · <b>Esc</b> 退出
+          </p>
 
           {/* Core Word Flashcard */}
           <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-md text-center space-y-6 relative overflow-hidden">
@@ -607,6 +742,10 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
             </div>
           </div>
 
+          <p className="hidden sm:block text-center text-[11px] text-slate-400">
+            键盘：<b>回车</b> 先核对拼写、再进下一个 · <b>Esc</b> 退出（输入框已自动聚焦，可直接打字）
+          </p>
+
           {/* Keyboard Helper */}
           <div className="bg-slate-100 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-4 shadow-sm">
             <span className="text-xs font-bold text-slate-500 inline-flex items-center gap-1 shrink-0">
@@ -637,11 +776,23 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
             {/* Input field */}
             <div className="space-y-3 max-w-sm mx-auto">
               <input
+                ref={mistakeInputRef}
                 type="text"
                 value={mistakeInput}
                 onChange={(e) => setMistakeInput(e.target.value)}
                 disabled={mistakeChecked}
-                onKeyDown={(e) => e.key === "Enter" && !mistakeChecked && handleCheckMistakeSpelling()}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { exitMistakePractice(); return; }
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  if (!mistakeChecked) {
+                    if (mistakeInput.trim()) handleCheckMistakeSpelling();
+                  } else if (mistakeCorrect) {
+                    handleResolveMistake();
+                  } else {
+                    handleNextMistake();
+                  }
+                }}
                 className={`w-full px-4 py-3 text-center text-lg font-bold font-sans rounded-xl border focus:outline-none transition-all ${
                   mistakeChecked
                     ? mistakeCorrect
@@ -711,6 +862,10 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
               结束测验
             </button>
           </div>
+
+          <p className="hidden sm:block text-center text-[11px] text-slate-400">
+            键盘：<b>1–4</b> 选选项 · <b>回车</b> 下一题 · <b>P</b> 重听发音 · <b>Esc</b> 退出
+          </p>
 
           <div className="bg-white border border-slate-100 rounded-2xl p-6 md:p-8 shadow-md text-center space-y-6">
             <div className="space-y-2">
@@ -945,6 +1100,74 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
                 </tbody>
               </table>
             </div>
+          )}
+        </section>
+      )}
+
+      {/* STANDARD DISPLAY: 待巩固 (weak words) List */}
+      {!reviewMode && !practiceMistakes && !quizMode && subTab === "consolidate" && (
+        <section className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
+          {weakList.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 space-y-3">
+              <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto">
+                <GraduationCap className="w-8 h-8 text-lake-blue-400" />
+              </div>
+              <p className="text-sm font-semibold">没有待巩固的词</p>
+              <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+                在「间隔复习」里评为<b>「模糊」</b>或<b>「不记得」</b>的词会自动收集到这里，你可以点上方按钮<b>只背这些词</b>，评「记住」后它们会自动移出。
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                这些是你在复习中评为「模糊/不记得」的词。点右上角<b>「只背这些待巩固词」</b>可单独闪卡复习；评「记住」即自动移出，也可手动点<Check className="w-3 h-3 inline -mt-0.5" />标记已掌握。
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm divide-y divide-slate-100">
+                  <thead>
+                    <tr className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="py-3 px-4">生词</th>
+                      <th className="py-3 px-4">词性</th>
+                      <th className="py-3 px-4">中文释义</th>
+                      <th className="py-3 px-4">例句</th>
+                      <th className="py-3 px-4 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {weakList.map((w) => (
+                      <tr key={w.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-4 px-4">
+                          <div className="flex items-center gap-1">
+                            <span className="text-base font-bold text-slate-800">{w.word}</span>
+                            <SpeakButton text={w.word} />
+                          </div>
+                          <p className="text-[10px] font-semibold font-mono text-slate-400">{w.keyInflections}</p>
+                        </td>
+                        <td className="py-4 px-4 text-xs font-semibold text-slate-500">{w.partOfSpeech}</td>
+                        <td className="py-4 px-4 text-sm font-medium text-slate-700">{w.translation}</td>
+                        <td className="py-4 px-4 text-sm text-slate-600">{w.exampleSentence}</td>
+                        <td className="py-4 px-4 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => handleMasterWord(w)}
+                            title="标记已掌握，移出待巩固"
+                            className="p-1.5 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteWord(w.id)}
+                            title="从生词本删除"
+                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </section>
       )}
