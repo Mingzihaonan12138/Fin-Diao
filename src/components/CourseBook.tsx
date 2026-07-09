@@ -3,6 +3,7 @@ import { CourseNote, VocabularyWord, FillBlankQuestion, ConjugationTable, Transl
 import { deleteCourseNote, saveVocabularyWord, saveExerciseRecord, saveCourseNote, loadVocabularyWords } from "../lib/sync";
 import StickyNotes from "./StickyNotes";
 import SpeakButton, { speakFinnish } from "./SpeakButton";
+import GroupLearn from "./GroupLearn";
 import {
   BookOpen,
   Trash2,
@@ -20,7 +21,8 @@ import {
   Play,
   Upload,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  GraduationCap
 } from "lucide-react";
 
 interface CourseBookProps {
@@ -48,6 +50,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
   const [savedVocabIds, setSavedVocabIds] = useState<string[]>([]);
   const [keyPointsExpanded, setKeyPointsExpanded] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [groupLearnMode, setGroupLearnMode] = useState(false);
   const [lessonVocabPracticeMode, setLessonVocabPracticeMode] = useState(false);
   const [lessonVocabPracticeIndex, setLessonVocabPracticeIndex] = useState(0);
   const [lessonVocabShowAnswer, setLessonVocabShowAnswer] = useState(false);
@@ -265,6 +268,7 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
     setTranslationChecks({});
     setSavedVocabIds([]);
     setRevealAnswers(false);
+    setGroupLearnMode(false);
     exitLessonVocabPractice();
   };
 
@@ -462,8 +466,16 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={lessonVocabPracticeMode ? exitLessonVocabPractice : startLessonVocabPractice}
+                    onClick={() => { setGroupLearnMode(v => !v); setLessonVocabPracticeMode(false); }}
                     disabled={lessonVocabWords.length === 0}
+                    className="px-4 py-2 bg-violet-500 hover:bg-violet-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-xl cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm"
+                  >
+                    <GraduationCap className="w-3.5 h-3.5" />
+                    {groupLearnMode ? "退出分组背单词" : "分组背单词"}
+                  </button>
+                  <button
+                    onClick={lessonVocabPracticeMode ? exitLessonVocabPractice : startLessonVocabPractice}
+                    disabled={lessonVocabWords.length === 0 || groupLearnMode}
                     className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-xl cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm"
                   >
                     <Play className="w-3.5 h-3.5" />
@@ -479,7 +491,14 @@ export default function CourseBook({ courses, user, onRefresh, onVocabAdded }: C
                 </div>
               </div>
 
-              {lessonVocabPracticeMode && currentLessonVocabWord ? (
+              {groupLearnMode ? (
+                <GroupLearn
+                  title={selectedCourse.title}
+                  words={lessonVocabWords as any}
+                  storageKey={selectedCourse.id}
+                  onExit={() => setGroupLearnMode(false)}
+                />
+              ) : lessonVocabPracticeMode && currentLessonVocabWord ? (
                 <div className="max-w-xl mx-auto space-y-5">
                   <div className="flex justify-between items-center bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
                     <span className="text-xs font-bold text-slate-500">
