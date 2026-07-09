@@ -23,7 +23,7 @@ interface GroupLearnProps {
 
 type QItem = { i: number; correct: number };
 
-const GROUP_SIZE = 6;
+const GROUP_SIZE = 20;
 const TARGET = 2; // 每个词答对几次才移出本组
 
 function chunk<T>(arr: T[], n: number): T[][] {
