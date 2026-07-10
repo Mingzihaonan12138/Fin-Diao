@@ -49,6 +49,22 @@ service cloud.firestore {
         && data.word is string && data.word.size() <= 100;
     }
 
+    function isValidReading(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId == request.auth.uid
+        && data.title is string && data.title.size() <= 200
+        && data.text is string && data.text.size() <= 10000
+        && data.voice is string && data.voice.size() <= 64
+        && data.rate is number;
+    }
+
+    function isValidStickyNote(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId == request.auth.uid
+        && data.text is string && data.text.size() <= 2000
+        && data.targetType in ['board', 'course', 'word'];
+    }
+
     // Collection: Courses
     match /courses/{courseId} {
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
@@ -83,6 +99,24 @@ service cloud.firestore {
       allow create: if isSignedIn() && isValidId(sentenceId) && isValidDailySentence(request.resource.data);
       allow update: if isSignedIn() && isValidId(sentenceId) && resource.data.userId == request.auth.uid && isValidDailySentence(request.resource.data);
       allow delete: if isSignedIn() && isValidId(sentenceId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Collection: Readings (段落朗读听力库)
+    match /readings/{readingId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(readingId) && isValidReading(request.resource.data);
+      allow update: if isSignedIn() && isValidId(readingId) && resource.data.userId == request.auth.uid && isValidReading(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(readingId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Collection: Sticky Notes (心得便签)
+    match /sticky_notes/{noteId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(noteId) && isValidStickyNote(request.resource.data);
+      allow update: if isSignedIn() && isValidId(noteId) && resource.data.userId == request.auth.uid && isValidStickyNote(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(noteId) && resource.data.userId == request.auth.uid;
     }
 
     // Collection: Word Inflections Cache (Read-only for clients, populated by server Admin SDK)
