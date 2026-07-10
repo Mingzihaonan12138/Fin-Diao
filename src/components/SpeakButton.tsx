@@ -1,27 +1,9 @@
 import { Volume2 } from "lucide-react";
+import { speakFinnish } from "../lib/tts";
 
-// 提前缓存语音列表：移动端 getVoices() 首次常为空，靠 voiceschanged 事件补上，
-// 这样第一次点就能选到芬兰语音色、避免"点一下没声音、再点才响"。
-let cachedVoices: SpeechSynthesisVoice[] = [];
-if (typeof window !== "undefined" && window.speechSynthesis) {
-  const load = () => { cachedVoices = window.speechSynthesis.getVoices(); };
-  load();
-  window.speechSynthesis.addEventListener?.("voiceschanged", load);
-}
-
-// 用浏览器内置的 fi-FI 语音朗读芬兰语，零成本、离线、无需存储音频。
-export function speakFinnish(text: string) {
-  if (!text || typeof window === "undefined" || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = "fi-FI";
-  utt.rate = 0.9; // 稍慢一点，便于跟读
-  // 优先挑一个真正的芬兰语音色（有些浏览器只设 lang 不够）；缓存空时现取一次兜底
-  const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
-  const fiVoice = voices.find(v => v.lang?.toLowerCase().startsWith("fi"));
-  if (fiVoice) utt.voice = fiVoice;
-  window.speechSynthesis.speak(utt);
-}
+// 朗读逻辑已移到 lib/tts.ts（Azure 神经语音 + IndexedDB 缓存 + 浏览器 TTS 兜底）；
+// 这里继续 re-export，旧的 `import { speakFinnish } from "./SpeakButton"` 不用改。
+export { speakFinnish };
 
 interface SpeakButtonProps {
   text: string;

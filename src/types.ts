@@ -140,6 +140,17 @@ export interface StickyNote {
   updatedAt: string;
 }
 
+export interface Reading {
+  id: string;
+  userId?: string;
+  title: string;
+  text: string;       // 芬兰语原文
+  voice: string;      // 如 "fi-FI-SelmaNeural"
+  rate: number;       // Azure prosody 语速百分比，-40 ~ +40
+  audioB64?: string;  // MP3 base64。短段落内联存 Firestore（文档上限 1MiB）；长段落只存文本，播放时现合成
+  createdAt: string;
+}
+
 export interface ExerciseRecord {
   id: string;
   userId: string;

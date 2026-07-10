@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronRight, Check, RotateCcw, ThumbsUp, XCircle, Volume2, AlertTriangle } from "lucide-react";
 import { grammarLibrary, GRAMMAR_CATEGORIES, GrammarCard } from "../data/grammarLibrary";
+import { speakFinnish } from "../lib/tts";
 
 interface GrammarPracticeProps {
   vocab?: any[];
@@ -23,13 +24,7 @@ export default function GrammarPractice({ vocab = [], onRefreshStats }: GrammarP
 
   const finnishChars = ["ä", "ö", "å", "Ä", "Ö", "Å"];
 
-  const speak = (text: string) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.lang = "fi-FI";
-    window.speechSynthesis.speak(utt);
-  };
+  const speak = (text: string) => speakFinnish(text);
 
   const isAnswerCorrect = (userVal: string, correctVal: string | string[]): boolean => {
     if (!userVal || !correctVal) return false;

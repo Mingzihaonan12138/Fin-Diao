@@ -9,7 +9,7 @@ import {
   updateDoc
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { CourseNote, VocabularyWord, ExerciseRecord, UserStats, StickyNote } from "../types";
+import { CourseNote, VocabularyWord, ExerciseRecord, UserStats, StickyNote, Reading } from "../types";
 
 // SM-2 Spaced Repetition Algorithm
 // quality: 0 to 5
@@ -275,6 +275,43 @@ export async function deleteStickyNote(id: string, user: any): Promise<void> {
     let list = getLocal<StickyNote>(LOCAL_STICKY);
     list = list.filter(n => n.id !== id);
     setLocal(LOCAL_STICKY, list);
+  }
+}
+
+// 12. READINGS (段落朗读听力库)
+const LOCAL_READINGS = "fi_readings";
+
+export async function loadReadings(user: any): Promise<Reading[]> {
+  if (user) {
+    const q = query(collection(db, "readings"), where("userId", "==", user.uid));
+    const snapshot = await getDocs(q);
+    const list = snapshot.docs.map(doc => doc.data() as Reading);
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  const list = getLocal<Reading>(LOCAL_READINGS);
+  return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function saveReading(reading: Reading, user: any): Promise<void> {
+  if (user) {
+    await setDoc(doc(db, "readings", reading.id), withoutUndefined({ ...reading, userId: user.uid }));
+  } else {
+    // 访客模式存 localStorage，音频不内联（配额只有几 MB），播放时走 IndexedDB 缓存/现合成
+    const { audioB64, ...rest } = reading;
+    const list = getLocal<Reading>(LOCAL_READINGS);
+    const i = list.findIndex(r => r.id === reading.id);
+    if (i > -1) list[i] = rest; else list.push(rest);
+    setLocal(LOCAL_READINGS, list);
+  }
+}
+
+export async function deleteReading(id: string, user: any): Promise<void> {
+  if (user) {
+    await deleteDoc(doc(db, "readings", id));
+  } else {
+    let list = getLocal<Reading>(LOCAL_READINGS);
+    list = list.filter(r => r.id !== id);
+    setLocal(LOCAL_READINGS, list);
   }
 }
 

@@ -63,7 +63,77 @@ app.get("/api/health", (req, res) => {
     databaseId: firebaseConfig.databaseId,
     adminFirestoreEnabled: Boolean(db),
     geminiEnvKeyConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS),
+    azureTtsConfigured: Boolean(process.env.AZURE_SPEECH_KEY),
   });
+});
+
+// Azure 神经语音代理（与 api/index.ts 保持一致，供本地 npm run dev 使用）
+const AZURE_TTS_VOICES = new Set(["fi-FI-SelmaNeural", "fi-FI-NooraNeural", "fi-FI-HarriNeural"]);
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+app.post("/api/tts", async (req, res) => {
+  try {
+    const key = process.env.AZURE_SPEECH_KEY;
+    const region = process.env.AZURE_SPEECH_REGION || "northeurope";
+    if (!key) {
+      return res.status(503).json({ error: "服务器未配置 AZURE_SPEECH_KEY，神经语音不可用。" });
+    }
+
+    const { text, voice, rate } = req.body || {};
+    const cleanText = typeof text === "string" ? text.trim() : "";
+    if (!cleanText) {
+      return res.status(400).json({ error: "缺少要朗读的文本。" });
+    }
+    if (cleanText.length > 5000) {
+      return res.status(400).json({ error: "文本过长（上限 5000 字符），请分段朗读。" });
+    }
+    const chosenVoice = AZURE_TTS_VOICES.has(voice) ? voice : "fi-FI-SelmaNeural";
+    const rateNum = Math.max(-40, Math.min(40, Math.round(Number(rate) || 0)));
+
+    const ssml =
+      `<speak version='1.0' xml:lang='fi-FI'>` +
+      `<voice xml:lang='fi-FI' name='${chosenVoice}'>` +
+      `<prosody rate='${rateNum}%'>${escapeXml(cleanText)}</prosody>` +
+      `</voice></speak>`;
+
+    const azResp = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": key,
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": "audio-24khz-96kbitrate-mono-mp3",
+        "User-Agent": "fin-diao",
+      },
+      body: ssml,
+    });
+
+    if (!azResp.ok) {
+      const hint =
+        azResp.status === 401 || azResp.status === 403
+          ? "（密钥或区域不对）"
+          : azResp.status === 429
+            ? "（超出免费配额或请求过快）"
+            : "";
+      console.error(`[Azure TTS] Failed with status ${azResp.status}`);
+      return res.status(502).json({ error: `Azure 语音合成失败 ${azResp.status} ${hint}` });
+    }
+
+    const audio = Buffer.from(await azResp.arrayBuffer());
+    res.set("Content-Type", "audio/mpeg");
+    res.set("Cache-Control", "no-store");
+    res.send(audio);
+  } catch (error: any) {
+    console.error("[Azure TTS] Error:", error);
+    res.status(500).json({ error: error.message || "服务器内部错误" });
+  }
 });
 
 // 3. API Key Management (Server-side Firestore backend, never exposes actual keys to frontend)

@@ -17,6 +17,7 @@ import VocabularyBook from "./components/VocabularyBook";
 import GrammarPractice from "./components/GrammarPractice";
 import DailySentence from "./components/DailySentence";
 import Settings from "./components/Settings";
+import Reader from "./components/Reader";
 import StickyNotes from "./components/StickyNotes";
 import Auth from "./components/Auth";
 
@@ -40,7 +41,7 @@ export default function App() {
   // App state
   const [activeTab, setActiveTab] = useState<string>("home");
   const [coursebookTab, setCoursebookTab] = useState<"notes" | "upload">("notes");
-  const [practiceSubTab, setPracticeSubTab] = useState<"grammar" | "sentence">("grammar");
+  const [practiceSubTab, setPracticeSubTab] = useState<"grammar" | "sentence" | "reader">("grammar");
 
   const handleSelectTab = (tabId: string) => {
     if (tabId === "upload") {
@@ -286,42 +287,41 @@ export default function App() {
           {activeTab === "practice" && (
             <div className="space-y-6">
               {/* Inner Tabs for Practice */}
-              <div className="flex bg-slate-100 p-1 rounded-2xl max-w-xs sm:max-w-sm">
-                <button
-                  onClick={() => setPracticeSubTab("grammar")}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
-                    practiceSubTab === "grammar"
-                      ? "bg-white text-lake-blue-800 shadow-sm font-extrabold"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  语法专项
-                </button>
-                <button
-                  onClick={() => setPracticeSubTab("sentence")}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
-                    practiceSubTab === "sentence"
-                      ? "bg-white text-lake-blue-800 shadow-sm font-extrabold"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  每日造句
-                </button>
+              <div className="flex bg-slate-100 p-1 rounded-2xl max-w-sm sm:max-w-md">
+                {([
+                  { id: "grammar", label: "语法专项" },
+                  { id: "sentence", label: "每日造句" },
+                  { id: "reader", label: "段落朗读" },
+                ] as const).map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setPracticeSubTab(t.id)}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                      practiceSubTab === t.id
+                        ? "bg-white text-lake-blue-800 shadow-sm font-extrabold"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
               </div>
 
-              {practiceSubTab === "grammar" ? (
-                <GrammarPractice 
-                  vocab={vocab}
-                  user={user}
-                  onRefreshStats={refreshData}
-                />
-              ) : (
-                <DailySentence 
+              {practiceSubTab === "grammar" && (
+                <GrammarPractice
                   vocab={vocab}
                   user={user}
                   onRefreshStats={refreshData}
                 />
               )}
+              {practiceSubTab === "sentence" && (
+                <DailySentence
+                  vocab={vocab}
+                  user={user}
+                  onRefreshStats={refreshData}
+                />
+              )}
+              {practiceSubTab === "reader" && <Reader user={user} />}
             </div>
           )}
 
