@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, MouseEvent as ReactMouseEvent } from "react";
 import {
   Volume2,
   Download,
@@ -6,6 +6,7 @@ import {
   Trash2,
   Loader2,
   Play,
+  Pause,
   Pencil,
   Headphones,
   CloudOff,
@@ -56,9 +57,21 @@ export default function Reader({ user }: ReaderProps) {
   const [lastBlob, setLastBlob] = useState<Blob | null>(null);
   const [readings, setReadings] = useState<Reading[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [loadingSavedId, setLoadingSavedId] = useState<string | null>(null);
+  // 共享 audio 元素的播放状态，驱动列表条目上的 播放⇄暂停 图标和进度条
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [curTime, setCurTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const urlRef = useRef<string | null>(null);
+
+  const fmtTime = (s: number) => {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
 
   useEffect(() => {
     loadReadings(user).then(setReadings).catch(() => {});
@@ -155,6 +168,9 @@ export default function Reader({ user }: ReaderProps) {
 
   const handlePlaySaved = async (r: Reading) => {
     setPlayingId(r.id);
+    setLoadingSavedId(r.id);
+    setCurTime(0);
+    setDuration(0);
     try {
       let blob: Blob;
       if (r.audioB64) {
@@ -168,7 +184,34 @@ export default function Reader({ user }: ReaderProps) {
     } catch (e: any) {
       setStatus({ msg: `播放失败：${e?.message || e}`, kind: "err" });
       setPlayingId(null);
+    } finally {
+      setLoadingSavedId(null);
     }
+  };
+
+  // 列表条目上的 播放⇄暂停：同一条目在播就暂停、暂停中就续播，其它条目则从头加载
+  const handleToggleSaved = (r: Reading) => {
+    const el = audioRef.current;
+    if (playingId === r.id && el && el.src) {
+      if (el.paused) {
+        el.play().catch(() =>
+          setStatus({ msg: "浏览器拦截了自动播放，请点击播放器上的 ▶ 手动播放。", kind: "err" })
+        );
+      } else {
+        el.pause();
+      }
+      return;
+    }
+    handlePlaySaved(r);
+  };
+
+  const handleSeek = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const el = audioRef.current;
+    if (!el || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    el.currentTime = ratio * duration;
+    setCurTime(el.currentTime);
   };
 
   const handleEditSaved = (r: Reading) => {
@@ -275,7 +318,17 @@ export default function Reader({ user }: ReaderProps) {
 
         {status && <div className={`mt-3 text-sm font-semibold ${statusColor}`}>{status.msg}</div>}
 
-        <audio ref={audioRef} controls className="w-full mt-4" />
+        <audio
+          ref={audioRef}
+          controls
+          className="w-full mt-4"
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+          onTimeUpdate={(e) => setCurTime(e.currentTarget.currentTime)}
+          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+          onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
+        />
       </div>
 
       {/* 听力库 */}
@@ -323,11 +376,17 @@ export default function Reader({ user }: ReaderProps) {
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
-                      onClick={() => handlePlaySaved(r)}
-                      title="播放"
+                      onClick={() => handleToggleSaved(r)}
+                      title={playingId === r.id && isPlaying ? "暂停" : "播放"}
                       className="p-2 rounded-xl bg-lake-blue-500 hover:bg-lake-blue-600 text-white transition-colors cursor-pointer"
                     >
-                      <Play className="w-4 h-4" />
+                      {loadingSavedId === r.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : playingId === r.id && isPlaying ? (
+                        <Pause className="w-4 h-4" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
                     </button>
                     <button
                       onClick={() => handleEditSaved(r)}
@@ -345,6 +404,26 @@ export default function Reader({ user }: ReaderProps) {
                     </button>
                   </div>
                 </div>
+                {playingId === r.id && (
+                  <div className="mt-3 flex items-center gap-2.5">
+                    <span className="text-[11px] tabular-nums text-slate-500 font-semibold shrink-0">
+                      {fmtTime(curTime)}
+                    </span>
+                    <div
+                      onClick={handleSeek}
+                      title="点击跳转"
+                      className="flex-1 h-2 rounded-full bg-slate-200 cursor-pointer relative overflow-hidden"
+                    >
+                      <div
+                        className="h-full bg-lake-blue-500 rounded-full transition-[width] duration-200"
+                        style={{ width: duration ? `${(curTime / duration) * 100}%` : "0%" }}
+                      />
+                    </div>
+                    <span className="text-[11px] tabular-nums text-slate-500 font-semibold shrink-0">
+                      {fmtTime(duration)}
+                    </span>
+                  </div>
+                )}
                 <details className="mt-2">
                   <summary className="text-[11px] text-lake-blue-600 font-bold cursor-pointer select-none">
                     查看原文
