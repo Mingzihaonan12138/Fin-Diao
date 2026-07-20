@@ -2,7 +2,19 @@ import { useState, useEffect, useRef, Fragment } from "react";
 import { VocabularyWord } from "../types";
 import { calculateSM2, saveVocabularyReviewProgress, deleteVocabularyWord } from "../lib/sync";
 import SpeakButton, { speakFinnish } from "./SpeakButton";
-import { 
+import ChannelDrill from "./ChannelDrill";
+import {
+  CHANNEL_KEYS,
+  CHANNEL_META,
+  MASTER_HITS,
+  getChannels,
+  bumpChannel,
+  weakestChannel,
+  masteredChannelCount,
+  isFullyMastered,
+  type ChannelKey,
+} from "../lib/channels";
+import {
   BookMarked, 
   Trash2, 
   RotateCcw, 
@@ -34,6 +46,26 @@ function FormCell({ label, value }: { label: string; value?: string | string[] }
     </div>
   );
 }
+// 三通道掌握度小圆点：认 / 听 / 写，亮起来的是已过关的通道
+function ChannelDots({ w }: { w: VocabularyWord }) {
+  const c = getChannels(w);
+  return (
+    <span className="flex items-center gap-1 mt-1">
+      {CHANNEL_KEYS.map(k => {
+        const meta = CHANNEL_META[k];
+        const passed = c[k] >= MASTER_HITS;
+        return (
+          <span
+            key={k}
+            title={`${meta.icon} ${meta.label}：${c[k]} / ${MASTER_HITS}${passed ? "（已过关）" : ""}`}
+            className={`w-2 h-2 rounded-full ${passed ? meta.dot : "bg-slate-200"}`}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
 function ParadigmPanel({ w }: { w: VocabularyWord }) {
   const inf = w.inflections;
   if (!inf) {
@@ -113,6 +145,14 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
   const [quizWrongWords, setQuizWrongWords] = useState<VocabularyWord[]>([]);
   const [quizSaving, setQuizSaving] = useState(false);
   const [quizListening, setQuizListening] = useState(false); // true=听音选意，隐藏单词只放发音
+
+  // 三通道强化 state（认/听/写，每次自动挑每个词最弱的那条通道来考）
+  const [channelMode, setChannelMode] = useState(false);
+  const [channelQueue, setChannelQueue] = useState<{ word: VocabularyWord; ch: ChannelKey }[]>([]);
+  const [channelIndex, setChannelIndex] = useState(0);
+  const [channelOptions, setChannelOptions] = useState<string[]>([]);
+  const [channelSaving, setChannelSaving] = useState(false);
+  const [channelRight, setChannelRight] = useState(0);
 
   // Helper characters for Finnish
   const finnishChars = ["ä", "ö", "å", "Ä", "Ö", "Å"];
@@ -423,6 +463,77 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
     }
   };
 
+  // ---- 三通道强化 ----
+  // 每次只考一个词最弱的那条通道，并优先安排通道过关数最少的词，
+  // 这样已经"认得"的词不会被反复重考，练习时间都花在听不懂/写不出的地方。
+  const channelPool = vocab.filter(w => !isFullyMastered(w));
+  const currentChannelItem = channelQueue[channelIndex];
+
+  const startChannelDrill = () => {
+    const ranked = [...channelPool].sort(
+      (a, b) => masteredChannelCount(a) - masteredChannelCount(b)
+    );
+    const picked = shuffle(ranked.slice(0, 40)).slice(0, Math.min(15, ranked.length));
+    const items = picked
+      .map(word => ({ word, ch: weakestChannel(word) }))
+      .filter((x): x is { word: VocabularyWord; ch: ChannelKey } => x.ch !== null);
+    if (items.length === 0) return;
+    setChannelQueue(items);
+    setChannelIndex(0);
+    setChannelOptions(buildQuizOptions(items[0].word, vocab));
+    setChannelRight(0);
+    setChannelSaving(false);
+    setChannelMode(true);
+  };
+
+  const exitChannelDrill = () => {
+    setChannelMode(false);
+    setChannelQueue([]);
+    setChannelIndex(0);
+    setChannelSaving(false);
+  };
+
+  const handleChannelAnswer = async (isCorrect: boolean) => {
+    const item = currentChannelItem;
+    if (!item || channelSaving) return;
+    const { word, ch } = item;
+    const nextChannels = bumpChannel(getChannels(word), ch, isCorrect);
+
+    setChannelSaving(true);
+    try {
+      await saveVocabularyReviewProgress(word, user, {
+        repetitions: word.repetitions || 0,
+        easeFactor: word.easeFactor || 2.5,
+        intervalDays: word.intervalDays || 0,
+        nextReviewAt: word.nextReviewAt,
+        correctCount: isCorrect ? (word.correctCount || 0) + 1 : (word.correctCount || 0),
+        incorrectCount: isCorrect ? (word.incorrectCount || 0) : (word.incorrectCount || 0) + 1,
+        channels: nextChannels,
+        // 听/写答错说明这个词真的不会 → 汇入错词集锦；认错了也一样
+        ...(isCorrect ? {} : { isMistake: true }),
+      });
+      if (isCorrect) setChannelRight(c => c + 1);
+
+      if (channelIndex + 1 < channelQueue.length) {
+        const ni = channelIndex + 1;
+        setChannelIndex(ni);
+        setChannelOptions(buildQuizOptions(channelQueue[ni].word, vocab));
+      } else {
+        await Promise.resolve(onRefresh());
+        const total = channelQueue.length;
+        const right = channelRight + (isCorrect ? 1 : 0);
+        exitChannelDrill();
+        alert(`三通道强化完成！答对 ${right} / ${total} 题。答错的词已进入错词集锦。`);
+        return;
+      }
+    } catch (err) {
+      console.error(err);
+      alert("保存练习结果失败，请检查网络后重试。");
+    } finally {
+      setChannelSaving(false);
+    }
+  };
+
   const typingInField = (e: KeyboardEvent) => {
     const t = e.target as HTMLElement | null;
     return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA");
@@ -502,7 +613,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
     <div className="space-y-6 animate-fade-in">
       
       {/* Tab Triggers */}
-      {!reviewMode && !practiceMistakes && !quizMode && (
+      {!reviewMode && !practiceMistakes && !quizMode && !channelMode && (
         <div className="flex justify-between items-center flex-wrap gap-4 border-b border-slate-200">
           <div className="flex">
             <button
@@ -557,6 +668,18 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
               >
                 <Volume2 className="w-3.5 h-3.5 text-teal-100" />
                 听音选意 ({Math.min(15, quizPool.length)} 题)
+              </button>
+            )}
+            {/* 门槛是"还有没练透的词"，不是词量——干扰项取自整个生词本，
+                所以哪怕只剩最后 1 个弱词也要能练 */}
+            {subTab === "book" && channelPool.length > 0 && vocab.length >= 4 && (
+              <button
+                onClick={startChannelDrill}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                title="认(选中文) / 听(听音拼写) / 写(看中文写词)，自动考你最弱的那条"
+              >
+                <Flame className="w-3.5 h-3.5 text-amber-300" />
+                三通道强化 ({Math.min(15, channelPool.length)} 题)
               </button>
             )}
             {subTab === "book" && pendingReviews.length > 0 && (
@@ -961,8 +1084,47 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
         </div>
       )}
 
+      {/* 三通道强化：每题只考这个词最弱的一条通道 */}
+      {channelMode && currentChannelItem && (
+        <div className="max-w-xl mx-auto space-y-5">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-white border border-slate-100 rounded-xl px-4 py-3 shadow-sm">
+            <span className="text-xs font-bold text-slate-400 uppercase">
+              三通道强化 ({channelIndex + 1} / {channelQueue.length}) · 已对 {channelRight}
+            </span>
+            <button
+              onClick={exitChannelDrill}
+              className="text-xs font-bold text-red-500 hover:text-red-600 cursor-pointer self-start sm:self-auto"
+            >
+              退出练习
+            </button>
+          </div>
+
+          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-slate-800 transition-all"
+              style={{ width: `${((channelIndex + 1) / channelQueue.length) * 100}%` }}
+            />
+          </div>
+
+          <p className="hidden sm:block text-center text-[11px] text-slate-400">
+            键盘：<b>1–4</b> 选项 · <b>回车</b> 检查 / 继续 · <b>P</b> 重听 · <b>Esc</b> 退出
+          </p>
+
+          <div key={`${currentChannelItem.word.id}-${currentChannelItem.ch}`}>
+            <ChannelDrill
+              word={currentChannelItem.word}
+              channel={currentChannelItem.ch}
+              options={channelOptions}
+              onAnswer={handleChannelAnswer}
+              busy={channelSaving}
+              onExit={exitChannelDrill}
+            />
+          </div>
+        </div>
+      )}
+
       {/* STANDARD DISPLAY: Vocabulary List */}
-      {!reviewMode && !practiceMistakes && !quizMode && subTab === "book" && (
+      {!reviewMode && !practiceMistakes && !quizMode && !channelMode && subTab === "book" && (
         <section className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
           {vocab.filter(w => !w.isMistake).length === 0 ? (
             <div className="py-12 text-center text-slate-400 space-y-3">
@@ -1004,6 +1166,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
                             <span>
                               <span className="block text-base font-bold text-slate-800 group-hover:text-lake-blue-600 transition-colors">{w.word}</span>
                               <span className="block text-[10px] font-semibold font-mono text-slate-400">{w.keyInflections}</span>
+                              <ChannelDots w={w} />
                             </span>
                           </button>
                           <SpeakButton text={w.word} />
@@ -1056,7 +1219,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       )}
 
       {/* STANDARD DISPLAY: Mistakes List */}
-      {!reviewMode && !practiceMistakes && !quizMode && subTab === "mistakes" && (
+      {!reviewMode && !practiceMistakes && !quizMode && !channelMode && subTab === "mistakes" && (
         <section className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
           {mistakesList.length === 0 ? (
             <div className="py-12 text-center text-slate-400 space-y-3">
@@ -1112,7 +1275,7 @@ export default function VocabularyBook({ vocab, user, onRefresh }: VocabularyBoo
       )}
 
       {/* STANDARD DISPLAY: 待巩固 (weak words) List */}
-      {!reviewMode && !practiceMistakes && !quizMode && subTab === "consolidate" && (
+      {!reviewMode && !practiceMistakes && !quizMode && !channelMode && subTab === "consolidate" && (
         <section className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
           {weakList.length === 0 ? (
             <div className="py-12 text-center text-slate-400 space-y-3">

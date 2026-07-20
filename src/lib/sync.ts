@@ -146,7 +146,11 @@ export async function saveVocabularyReviewProgress(
   reviewPatch: Pick<
     VocabularyWord,
     "repetitions" | "easeFactor" | "intervalDays" | "nextReviewAt" | "correctCount" | "incorrectCount"
-  > & { isMistake?: boolean; needsPractice?: boolean }
+  > & {
+    isMistake?: boolean;
+    needsPractice?: boolean;
+    channels?: { see: number; hear: number; write: number };
+  }
 ): Promise<void> {
   const updatedWord: VocabularyWord = { ...word, ...reviewPatch };
 

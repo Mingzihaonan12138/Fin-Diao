@@ -55,6 +55,9 @@ export interface VocabularyWord {
   nextReviewAt: string; // ISO date string
   isMistake?: boolean;  // True if it is currently in the mistake book (拼写/测验答错)
   needsPractice?: boolean; // True if 复习时评"模糊/不记得" → 进"待巩固"池
+  // 三通道掌握度：认(看词选义)/听(听音拼写)/写(看中文写词) 各自的连续答对次数。
+  // 达到 MASTER_HITS 即该通道过关，三条全过才算真掌握。详见 lib/channels.ts
+  channels?: { see: number; hear: number; write: number };
   incorrectCount: number;
   correctCount: number;
   inflections?: WordInflections;
