@@ -83,6 +83,37 @@ export default function Reader({ user }: ReaderProps) {
     loadReadings(user).then(setReadings).catch(() => {});
   }, [user]);
 
+  // 播放时的键盘快捷键：空格 播放/暂停，← → 快退/快进 5 秒。
+  // 只在段落朗读页挂载（本组件仅此页渲染）；输入框/下拉/原生播放器聚焦时不拦截。
+  const SEEK_STEP = 5;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = audioRef.current;
+      if (!el || !el.src) return; // 还没合成/播放过任何音频，快捷键不生效
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      // 在文本框/下拉里打字或用原生播放器时，交还给浏览器默认行为
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "AUDIO" || t?.isContentEditable) {
+        return;
+      }
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (el.paused) el.play().catch(() => {}); else el.pause();
+      } else if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        el.currentTime = Math.max(0, el.currentTime - SEEK_STEP);
+        setCurTime(el.currentTime);
+      } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        const dur = el.duration || Infinity;
+        el.currentTime = Math.min(dur, el.currentTime + SEEK_STEP);
+        setCurTime(el.currentTime);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // 编辑区内容一变，上一次的合成结果就作废（避免"改了字下载/保存的还是旧音频"）
   const handleTextChange = (v: string) => {
     setText(v);
@@ -502,6 +533,11 @@ export default function Reader({ user }: ReaderProps) {
           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
           onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
         />
+        <p className="mt-2 text-[11px] text-slate-400 font-medium hidden sm:block">
+          快捷键：<kbd className="px-1 py-0.5 rounded bg-slate-100 font-semibold">空格</kbd> 播放/暂停 ·
+          <kbd className="px-1 py-0.5 rounded bg-slate-100 font-semibold ml-1">←</kbd>
+          <kbd className="px-1 py-0.5 rounded bg-slate-100 font-semibold">→</kbd> 快退/快进 5 秒
+        </p>
       </div>
 
       {/* 听力库 */}
