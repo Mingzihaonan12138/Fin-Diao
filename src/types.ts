@@ -150,6 +150,7 @@ export interface Reading {
   text: string;       // 芬兰语原文
   voice: string;      // 如 "fi-FI-SelmaNeural"
   rate: number;       // Azure prosody 语速百分比，-40 ~ +40
+  group?: string;     // 所属分组/合辑名（如「第5课」「旅行主题」），空=未分组。用于听力库归类折叠
   audioB64?: string;  // MP3 base64。短段落内联存 Firestore（文档上限 1MiB）；长段落只存文本，播放时现合成
   createdAt: string;
 }
